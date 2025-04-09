@@ -1,0 +1,31 @@
+#---------------------------------------------------------------------
+# Retrospective analysis for SS scenarios
+#---------------------------------------------------------------------
+
+library(r4ss)
+
+wd<- "#each scenarios' path; done individually" 
+setwd(wd)
+
+# run retrospectives; you can change the number of years to be removed; we used -5 years
+retro(dir=getwd(),
+      newsubdir="retrospectives",
+      subdirstart="retro",
+      years= 0:-5,
+      overwrite = TRUE,
+      exe="ss3")
+
+retroModels <- SSgetoutput(
+  dirvec = file.path(wd, "retrospectives", paste("retro", 0:-5, sep = ""))
+)
+
+retroSummary <- SSsummarize(retroModels)
+
+endyrvec <- retroSummary[["endyrs"]] + 0:-5
+
+SSplotComparisons(retroSummary,
+                  print=TRUE,
+                  plotdir="retrospectives",
+                  endyrvec = endyrvec,
+                  legendlabels = paste("Data", 0:-5, "years")
+)
