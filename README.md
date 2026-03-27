@@ -1,4 +1,6 @@
-# Overcoming data limitations: reliable fisheries assessment in ‘data-limited’ scenarios.
+# Overcoming data limitations in fisheries assessment: Integrating historical data and local knowledge 
+# for red grouper (Epinephelus morio) management in the Campeche Bank.                                  <img width="430" height="332" alt="image" src="https://github.com/user-attachments/assets/2d846431-3fc9-4a41-9289-c8f54d3c32d3" />
+
 Data and code for red grouper fishery re-assessment
 
 Authors:
@@ -9,12 +11,12 @@ de México, Carretera Mérida-Tetiz, Km 4, CP 97357, Ucú, Yucatán, México
 * Corresponding author 
 
 Abstract
-Data-limited fisheries present a significant challenge for quantitative stock assessment and sustainable management. This study addresses the ambiguity inherent in the "data-limited" classification, which encompasses deficiencies in data quantity, quality, and type, alongside limitations in resources (time, funding, capacity). We investigate the implications of this multifaceted concept through a case study of the commercially and recreationally important red grouper (Epinephelus morio) fishery on the Campeche Bank, Mexico. With a history of research and management, the stock has been persistently classified as declining despite sustained yields, suggesting potential issues in data/modeling. We reconstructed historical catch series by integrating diverse data sources and validating them with local ecological knowledge from experienced fishers to provide a more robust estimate of stock removals. Biomass trajectories derived from these reconstructed catches were compared with those from previous assessments. Furthermore, we applied an integrated age-structured assessment model (Stock Synthesis) and contrasted its outputs with those from data-limited methods (Monte Carlo Catch-MSY and Optimized Catch Only Method) to evaluate the influence of model selection and parameter assumptions on stock status estimates. Our analysis indicates that while the E. morio stock is not fully recovered, a recovery trend is evident following past depletion. However, current management strategies do not appear to be achieving desired stock improvements. This research underscores the critical need for the comprehensive integration of all available data, including catch statistics, biological parameters, and local knowledge, to enhance understanding of plausible stock states and develop more resilient and adaptive management strategies for this crucial fishery.
+Data-limited fisheries present significant challenges for quantitative stock assessment and sustainable management. This study addresses the multifaceted nature of "data-limited" classifications, which encompass deficiencies in data quantity, quality, and type, alongside limitations in resources. We investigate these complexities through a case study of the red grouper (Epinephelus morio) fishery on the Campeche Bank, Mexico. Despite decades of research and management, the stock has been persistently classified as declining while maintaining sustained yields, suggesting potential issues in assessment approaches. We reconstructed historical catch series (1950-2023) by integrating diverse data sources and validating them with local ecological knowledge from experienced fishers. We applied an integrated assessment model (Stock Synthesis) incorporating fishing gear selectivity and biological parameters, and compared its outputs with data-limited methods (SPiCT, BSM, LBSPR, CMSY and OCOM) to compare how model selection and parameter assumptions influence stock status estimates. Our analysis indicates the red grouper stock experienced severe depletion from 1950-1998, followed by gradual recovery. Current status estimates suggest the stock is approaching sustainable levels (B/BMSY ≈ 1), contrasting sharply with surplus production and catch-only methods that indicate continued depletion. This research underscores the critical importance of comprehensive data integration, including catch statistics, biological parameters, fishing gear selectivity, and local knowledge, for developing resilient management strategies. We emphasize that gear selectivity improvements targeting larger individuals could enhance yield while supporting stock recovery.
 
-![image](https://github.com/user-attachments/assets/946057dd-0b73-4292-a99d-4dcc134cb090)
+
 Relative red grouper spawning stock biomass.
 
-![image](https://github.com/user-attachments/assets/5b9a1b23-c5c8-40a7-a611-49c97677fc3c)
+
 Red grouper stock status.
 
 
