@@ -1,0 +1,63 @@
+###
+console output
+2025-12-27 22:48:19.373274
+###
+ 
+ reading from starter.ss
+ reading from data file
+Data read successful 999
+
+ reading forecast file 
+ reading from control file
+End of control file successful! 999
+Begin setting up parameters ...  end of parameter section 
+Evaluating biology calculations once ... done
+Starting optimization of 'ss3' in phase 1 of 4 at Sat Dec 27 22:47:30 2025
+phase= 1 | nvar= 75 | iter=  0 | nll=4.65e+06 | mag=9.27e+06 | par[  1]=SR_parm[1]
+phase= 1 | nvar= 75 | iter= 20 | nll=-3.02e+01 | mag=1.22e+02 | par[  1]=SR_parm[1]
+phase= 1 | nvar= 75 | iter= 40 | nll=-3.54e+01 | mag=8.34e+01 | par[  1]=SR_parm[1]
+phase= 1 | nvar= 75 | iter= 60 | nll=-3.64e+01 | mag=7.46e+01 | par[  1]=SR_parm[1]
+Exiting without success due to excessive function evaluations (maxfn=100) | mag=74.7147
+phase= 1 | nvar= 75 | iter= 64 | nll=-3.64e+01 | mag=7.47e+01 | par[  1]=SR_parm[1]
+phase= 2 | nvar= 75 | iter=  0 | nll=-3.64e+01 | mag=7.47e+01 | par[  1]=SR_parm[1]
+phase= 2 | nvar= 75 | iter= 18 | nll=-3.96e+01 | mag=8.82e+00 | par[  1]=SR_parm[1]
+phase= 3 | nvar= 92 | iter=  0 | nll=-3.96e+01 | mag=1.12e+02 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter= 20 | nll=-6.35e+01 | mag=4.56e+01 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter= 40 | nll=-6.52e+01 | mag=1.22e+01 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter= 60 | nll=-6.53e+01 | mag=4.75e+01 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter= 80 | nll=-6.66e+01 | mag=1.42e+01 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter=100 | nll=-6.72e+01 | mag=3.25e+01 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter=120 | nll=-6.72e+01 | mag=2.70e+01 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter=140 | nll=-6.73e+01 | mag=2.88e+00 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter=160 | nll=-6.73e+01 | mag=1.20e+00 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter=180 | nll=-6.73e+01 | mag=7.03e-01 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter=200 | nll=-6.73e+01 | mag=7.86e+00 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter=220 | nll=-6.73e+01 | mag=5.05e-01 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter=239 | nll=-6.73e+01 | mag=1.34e-05 | par[ 85]=selparm[13]
+phase= 4 | nvar= 93 | iter=  0 | nll=-6.73e+01 | mag=1.34e-05 | par[ 86]=selparm[13]
+Optimization completed after 13 s with final statistics:
+  nll=-67.297423 | mag=1.33800e-05 | par[ 86]=selparm[13]
+
+Warning: the following parameters had issues
+  SR_parm[1] is within 0.1% of upper bound: 0.0001 < 19.9999 < 20
+  selparm[10] is within 1% of upper bound: -15 < 5.91128 < 6
+
+Wrote first version of output files (before hessian, benchmark, and forecast)
+Calculating Hessian (93 variables): 20%, 40%, 60%, 80%, 100% done (9.3 s) 
+Differentiating 8 derived quantities: 1, 2, 3, 4, 5, 6, 7, 8 done (25 s) 
+Inverting Hessian (93 variables): 20%, 40%, 60%, 80%, 100% done (0.007 s) 
+Starting standard error calculations...  done (0.59 s) 
+Iterations: 860
+Finished forecast
+Writing wtatage.ss_new
+mceval counter: 0
+Finished posteriors
+Finished final writing of report.sso
+Begin writing *.ss_new output files ... Finished writing *.ss_new output files
+
+ N parameters that are on or within 1% of min-max bound: 2
+
+!!  Run has completed  !! 
+!!  See warning.sso for 10 warnings  and 4 notes 
+
+Finished running model 'ss3' after 49 s.

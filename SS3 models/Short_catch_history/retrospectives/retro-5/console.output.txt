@@ -1,0 +1,51 @@
+###
+console output
+2025-10-05 18:33:30.495224
+###
+ 
+ reading from starter.ss
+ reading from data file
+Data read successful 999
+
+ reading forecast file 
+ reading from control file
+End of control file successful! 999
+Begin setting up parameters ...  end of parameter section 
+Evaluating biology calculations once ... done
+Starting optimization of 'ss3' in phase 1 of 3 at Sun Oct  5 18:33:23 2025
+phase= 1 | nvar=  3 | iter=  0 | nll=1.32e+06 | mag=2.29e+05 | par[  1]=SR_parm[1]
+phase= 1 | nvar=  3 | iter=  6 | nll=-4.33e+01 | mag=2.54e+00 | par[  3]=init_F[2]
+phase= 2 | nvar=  3 | iter=  0 | nll=-4.33e+01 | mag=2.54e+00 | par[  3]=init_F[2]
+phase= 3 | nvar=  9 | iter=  0 | nll=-4.33e+01 | mag=4.78e+01 | par[  6]=selparm[1]
+phase= 3 | nvar=  9 | iter= 20 | nll=-4.80e+01 | mag=1.38e-02 | par[  6]=selparm[1]
+phase= 3 | nvar=  9 | iter= 40 | nll=-4.80e+01 | mag=2.04e-02 | par[  3]=init_F[2]
+phase= 3 | nvar=  9 | iter= 47 | nll=-4.80e+01 | mag=4.39e-05 | par[  4]=Q_parm[2]
+Optimization completed after 0.82 s with final statistics:
+  nll=-48.018168 | mag=4.38903e-05 | par[  4]=Q_parm[2]
+
+Warning: the following parameters had issues
+  SR_parm[1] is within 0.1% of upper bound: 0.0001 < 19.995 < 20
+  init_F[1] is within 0.1% of lower bound: 0 < 6.02066e-09 < 10
+  init_F[2] is within 0.1% of lower bound: 0 < 6.55347e-09 < 10
+  Q_parm[2] is within 0.1% of lower bound: 0 < 5.19025e-09 < 5
+  Q_parm[4] is within 0.1% of lower bound: 0 < 7.16913e-09 < 5
+
+Wrote first version of output files (before hessian, benchmark, and forecast)
+Calculating Hessian: 1, 2, 3, 4, 5, 6, 7, 8, 9 done (0.39 s) 
+Differentiating 8 derived quantities: 1, 2, 3, 4, 5, 6, 7, 8 done (5.3 s) 
+Inverting Hessian: 1, 2, 3, 4, 5, 6, 7, 8, 9 done (0.001 s) 
+Starting standard error calculations...  done (0.075 s) 
+Iterations: 118
+Finished forecast
+Writing wtatage.ss_new
+mceval counter: 0
+Finished posteriors
+Finished final writing of report.sso
+Begin writing *.ss_new output files ... Finished writing *.ss_new output files
+
+ N parameters that are on or within 1% of min-max bound: 5
+
+!!  Run has completed  !! 
+!!  See warning.sso for 8 warnings  and 3 notes 
+
+Finished running model 'ss3' after 7.1 s.

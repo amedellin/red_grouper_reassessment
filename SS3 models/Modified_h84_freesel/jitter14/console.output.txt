@@ -1,0 +1,73 @@
+###
+console output
+2025-12-27 22:58:36.897106
+###
+ 
+ reading from starter.ss
+ reading from data file
+Data read successful 999
+
+ reading forecast file 
+ reading from control file
+End of control file successful! 999
+Begin setting up parameters ...  end of parameter section 
+Evaluating biology calculations once ... done
+Starting optimization of 'ss3' in phase 1 of 4 at Sat Dec 27 22:57:39 2025
+phase= 1 | nvar= 75 | iter=  0 | nll=4.95e+06 | mag=6.00e+06 | par[  1]=SR_parm[1]
+phase= 1 | nvar= 75 | iter= 20 | nll=1.22e+01 | mag=2.14e+01 | par[ 36]=recdev2[35]
+phase= 1 | nvar= 75 | iter= 23 | nll=1.13e+01 | mag=8.77e+00 | par[  1]=SR_parm[1]
+phase= 2 | nvar= 75 | iter=  0 | nll=1.13e+01 | mag=8.77e+00 | par[  1]=SR_parm[1]
+phase= 3 | nvar= 92 | iter=  0 | nll=1.13e+01 | mag=1.27e+03 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter= 20 | nll=-8.76e+01 | mag=3.33e+01 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter= 40 | nll=-8.91e+01 | mag=7.02e+00 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter= 60 | nll=-8.94e+01 | mag=4.05e+00 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter= 80 | nll=-8.95e+01 | mag=3.29e+00 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=100 | nll=-8.95e+01 | mag=1.94e+00 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=120 | nll=-8.95e+01 | mag=2.72e+00 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=140 | nll=-8.95e+01 | mag=1.38e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=160 | nll=-8.95e+01 | mag=9.19e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=180 | nll=-8.95e+01 | mag=3.01e-02 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=200 | nll=-8.95e+01 | mag=7.29e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=220 | nll=-8.95e+01 | mag=2.05e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=240 | nll=-8.95e+01 | mag=1.84e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=260 | nll=-8.95e+01 | mag=5.59e-02 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=280 | nll=-8.95e+01 | mag=9.95e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=300 | nll=-8.95e+01 | mag=6.26e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=320 | nll=-8.95e+01 | mag=3.57e-02 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter=340 | nll=-8.95e+01 | mag=4.59e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=360 | nll=-8.95e+01 | mag=1.21e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=380 | nll=-8.95e+01 | mag=3.67e-02 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=400 | nll=-8.95e+01 | mag=1.67e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=420 | nll=-8.95e+01 | mag=4.56e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=440 | nll=-8.95e+01 | mag=9.57e-02 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=460 | nll=-8.95e+01 | mag=2.93e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=480 | nll=-8.95e+01 | mag=1.64e-01 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=500 | nll=-8.95e+01 | mag=6.79e-02 | par[ 81]=selparm[7]
+phase= 3 | nvar= 92 | iter=512 | nll=-8.95e+01 | mag=2.00e-06 | par[ 81]=selparm[7]
+phase= 4 | nvar= 93 | iter=  0 | nll=-8.95e+01 | mag=2.00e-06 | par[ 82]=selparm[7]
+Optimization completed after 16 s with final statistics:
+  nll=-89.520814 | mag=2.00046e-06 | par[ 82]=selparm[7]
+
+Warning: the following parameters had issues
+  SR_parm[1] is within 0.1% of upper bound: 0.0001 < 19.9998 < 20
+  selparm[13] is within 0.1% of upper bound: 20 < 82.9717 < 83
+
+Wrote first version of output files (before hessian, benchmark, and forecast)
+Calculating Hessian (93 variables): 20%, 40%, 60%, 80%, 100% done (10 s) 
+Differentiating 8 derived quantities: 1, 2, 3, 4, 5, 6, 7, 8 done (29 s) 
+Inverting Hessian (93 variables): 20%, 40%, 60%, 80%, 100% done (0.011 s) 
+Starting standard error calculations...  done (0.61 s) 
+Iterations: 1046
+Finished forecast
+Writing wtatage.ss_new
+mceval counter: 0
+Finished posteriors
+Finished final writing of report.sso
+Begin writing *.ss_new output files ... Finished writing *.ss_new output files
+
+ N parameters that are on or within 1% of min-max bound: 2
+
+!!  Run has completed  !! 
+!!  See warning.sso for 10 warnings  and 4 notes 
+
+Finished running model 'ss3' after 58 s.

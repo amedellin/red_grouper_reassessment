@@ -1,0 +1,74 @@
+
+Initial statistics: 3 variables; iteration 0; function evaluation 0; phase 1
+Function value 1.3405484e+06; maximum gradient component mag -6.6393e+04
+Var    Value     Gradient |Var    Value     Gradient |Var    Value     Gradient
+  1 -0.22375 -6.63928e+04 |  2 -0.35551  1.56394e+03 |  3 -0.33091  2.34177e+03
+
+ - final statistics:
+3 variables; iteration 4; function evaluation 16
+Function value 2.2832e+01; maximum gradient component mag -8.4361e+00
+Exit code = 1;  converg criter 1.0000e+01
+Var    Value     Gradient |Var    Value     Gradient |Var    Value     Gradient
+  1  0.06589 -8.43613e+00 |  2 -1.11558 -2.75601e+00 |  3 -1.10650 -2.68709e+00
+
+ - final statistics:
+3 variables; iteration 0; function evaluation 0
+Function value 2.2832e+01; maximum gradient component mag -8.4361e+00
+Exit code = 0;  converg criter 1.0000e+01
+Var    Value     Gradient |Var    Value     Gradient |Var    Value     Gradient
+  1  0.06589 -8.43613e+00 |  2 -0.88442  2.75601e+00 |  3 -0.89350  2.68709e+00
+
+Initial statistics: 9 variables; iteration 0; function evaluation 0; phase 3
+Function value 2.2831832e+01; maximum gradient component mag 6.1946e+01
+Var    Value     Gradient |Var    Value     Gradient |Var    Value     Gradient
+  1  0.06589 -8.43613e+00 |  2 -0.88442  2.75601e+00 |  3 -0.89350  2.68709e+00
+  4 -0.41799  6.19455e+01 |  5 -0.40162  5.82202e+01 |  6 -0.22889 -1.28095e+01
+  7  0.01511 -1.01196e+01 |  8 -0.14202 -3.75747e+01 |  9  0.05901  1.83259e+01
+
+Intermediate statistics: 9 variables; iteration 20; function evaluation 31; phase 3
+Function value -4.6706979e+01; maximum gradient component mag 4.9348e-01
+Var    Value     Gradient |Var    Value     Gradient |Var    Value     Gradient
+  1  1.41468  4.12239e-03 |  2 -1.00010 -2.46246e-02 |  3 -1.00006 -9.73593e-03
+  4 -0.96234 -1.92110e-01 |  5 -1.00764 -3.79463e-01 |  6 -0.06280 -8.79412e-02
+  7  0.43992 -1.29716e-01 |  8 -0.03777 -4.06718e-01 |  9  0.09532  4.93481e-01
+9 variables; iteration 40; function evaluation 54; phase 3
+Function value -4.6720177e+01; maximum gradient component mag -9.1104e-02
+Var    Value     Gradient |Var    Value     Gradient |Var    Value     Gradient
+  1  1.31296  1.34371e-03 |  2 -1.00035 -9.11037e-02 |  3 -0.99974  5.46499e-02
+  4 -0.96046  1.22294e-03 |  5 -1.00082 -3.91424e-02 |  6 -0.06036 -5.00462e-03
+  7  0.73723 -9.92524e-05 |  8 -0.03884 -3.02669e-03 |  9  0.09253  5.82835e-03
+9 variables; iteration 60; function evaluation 74; phase 3
+Function value -4.6720340e+01; maximum gradient component mag 1.0632e-03
+Var    Value     Gradient |Var    Value     Gradient |Var    Value     Gradient
+  1  0.99228  2.39587e-06 |  2 -0.99997  5.45741e-04 |  3 -0.99997  1.06316e-03
+  4 -0.96047 -1.30672e-04 |  5 -1.00009  5.81080e-04 |  6 -0.06033 -8.41491e-05
+  7  0.73831 -4.19771e-06 |  8 -0.03888 -2.57621e-04 |  9  0.09248  2.59044e-04
+Warning: the following parameters had issues
+  SR_parm[1] is within 0.1% of upper bound: 1.00000e-04 < 1.99992e+01 < 2.00000e+01
+  init_F[1] is within 0.1% of lower bound: 0.00000e+00 < 4.72298e-09 < 1.00000e+01
+  init_F[2] is within 0.1% of lower bound: 0.00000e+00 < 5.67323e-09 < 1.00000e+01
+  Q_parm[2] is within 0.1% of lower bound: 0.00000e+00 < 4.81728e-03 < 5.00000e+00
+  Q_parm[4] is within 0.1% of lower bound: 0.00000e+00 < 2.53571e-08 < 5.00000e+00
+
+
+ - final statistics:
+9 variables; iteration 62; function evaluation 76
+Function value -4.6720e+01; maximum gradient component mag -5.4790e-05
+Exit code = 1;  converg criter 1.0000e-04
+Var    Value     Gradient |Var    Value     Gradient |Var    Value     Gradient
+  1  0.99172  7.31509e-07 |  2 -0.99997 -1.48917e-05 |  3 -0.99997 -6.01720e-06
+  4 -0.96047  1.62190e-05 |  5 -1.00009  1.57580e-05 |  6 -0.06032  2.61231e-05
+  7  0.73838  1.80857e-06 |  8 -0.03888  4.61071e-05 |  9  0.09247 -5.47896e-05
+Estimating row 1 out of 9 for hessian
+Estimating row 2 out of 9 for hessian
+Estimating row 3 out of 9 for hessian
+Estimating row 4 out of 9 for hessian
+Estimating row 5 out of 9 for hessian
+Estimating row 6 out of 9 for hessian
+Estimating row 7 out of 9 for hessian
+Estimating row 8 out of 9 for hessian
+Estimating row 9 out of 9 for hessian
+size of file gradfil1.tmp = 0
+size of file gradfil2.tmp = 0
+size of file varssave.tmp = 0
+size of file cmpdiff.tmp = 0

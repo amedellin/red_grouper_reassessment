@@ -1,0 +1,4 @@
+#Data_type Fleet New_Var_adj hash Old_Var_adj New_Francis New_MI Francis_mult Francis_lo Francis_hi MI_mult Type Name Note
+4 1 0.003077 # 0.009766 0.003077 0.001759 0.315034 0.198966 1.570415 0.180164 len Fleet_1 
+4 2 0.000941 # 0.007833 0.000941 0.001601 0.120087 0.082127 0.440859 0.204421 len Fleet_2 
+4 3 0.000423 # 0.002461 0.000423 0.003936 0.172077 0.135899 0.301822 1.59935 len Fleet_3 

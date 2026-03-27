@@ -1,0 +1,123 @@
+<html><head><title>SS Output</title>
+    <!-- source for text below is http://unraveled.com/publications/css_tabs/ -->
+    <!-- CSS Tabs is licensed under Creative Commons Attribution 3.0 - http://creativecommons.org/licenses/by/3.0/ -->
+    
+    <style type="text/css">
+    
+    body {
+    font: 100% verdana, arial, sans-serif;
+    background-color: #fff;
+    margin: 50px;
+    }
+    
+    /* begin css tabs */
+    
+    ul#tabnav { /* general settings */
+    text-align: left; /* set to left, right or center */
+    margin: 1em 0 1em 0; /* set margins as desired */
+    font: bold 11px verdana, arial, sans-serif; /* set font as desired */
+    border-bottom: 1px solid #6c6; /* set border COLOR as desired */
+    list-style-type: none;
+    padding: 3px 10px 2px 10px; /* THIRD number must change with respect to padding-top (X) below */
+    }
+    
+    ul#tabnav li { /* do not change */
+    display: inline;
+    }
+    
+    body#tab1 li.tab1, body#tab2 li.tab2, body#tab3 li.tab3, body#tab4 li.tab4 { /* settings for selected tab */
+    border-bottom: 1px solid #fff; /* set border color to page background color */
+    background-color: #fff; /* set background color to match above border color */
+    }
+    
+    body#tab1 li.tab1 a, body#tab2 li.tab2 a, body#tab3 li.tab3 a, body#tab4 li.tab4 a { /* settings for selected tab link */
+    background-color: #fff; /* set selected tab background color as desired */
+    color: #000; /* set selected tab link color as desired */
+    position: relative;
+    top: 1px;
+    padding-top: 4px; /* must change with respect to padding (X) above and below */
+    }
+    
+    ul#tabnav li a { /* settings for all tab links */
+    padding: 2px 4px; /* set padding (tab size) as desired; FIRST number must change with respect to padding-top (X) above */
+    border: 1px solid #6c6; /* set border COLOR as desired; usually matches border color specified in #tabnav */
+    background-color: #cfc; /* set unselected tab background color as desired */
+    color: #666; /* set unselected tab link color as desired */
+    margin-right: 0px; /* set additional spacing between tabs as desired */
+    text-decoration: none;
+    border-bottom: none;
+    }
+    
+    ul#tabnav a:hover { /* settings for hover effect */
+    background: #fff; /* set desired hover color */
+    }
+    
+    /* end css tabs */
+    
+    
+    h2 {
+    font-size: 20px;
+    color: #4c994c;
+    padding-top: 1px;
+    font-weight: bold;
+    border-bottom-width: 1px;
+    border-bottom-style: solid;
+    border-bottom-color: #6c6;
+    padding-bottom: 2px;
+    padding-left: 0px;
+    }
+    </style></head>
+<!-- Site navigation menu -->
+   <ul id="tabnav">
+    <li class="tab1"><a href="_SS_output.html">Home</a></li>
+    <li class="tab2"><a href="_SS_output_Bio.html">Bio</a></li>
+    <li class="tab3"><a href="_SS_output_Sel.html">Sel</a></li>
+    <li class="tab4"><a href="_SS_output_Timeseries.html">Timeseries</a></li>
+    <li class="tab5"><a href="_SS_output_RecDev.html">RecDev</a></li>
+    <li class="tab6"><a href="_SS_output_S-R.html">S-R</a></li>
+    <li class="tab7"><a href="_SS_output_Catch.html">Catch</a></li>
+    <li class="tab8"><a href="_SS_output_SPR.html">SPR</a></li>
+    <li class="tab9"><a href="_SS_output_Index.html">Index</a></li>
+    <li class="tab10"><a href="_SS_output_Numbers.html">Numbers</a></li>
+    <li class="tab11"><a href="_SS_output_CompDat.html">CompDat</a></li>
+    <li class="tab12"><a href="_SS_output_LenComp.html">LenComp</a></li>
+    <li class="tab13"><a href="_SS_output_Yield.html">Yield</a></li>
+    <li class="tab14"><a href="_SS_output_Data.html">Data</a></li>
+    <li class="tab15"><a href="_SS_output_Pars.html">Pars</a></li>
+    <li class="tab16"><a href="_SS_output_DiagnosticTables.html">DiagnosticTables</a></li>
+  </ul>
+
+
+<h2><a name="Home">Home</h2>
+<p><b>SS version:</b>
+3.30.22.1;_safe;_compile_date:_Jan 30 2024;_Stock_Synthesis_by_Richard_Methot_(NOAA)_using_ADMB_13.1</p>
+
+<p><b>r4ss info:<br></b>
+Version: 1.49.2<br>Date: NULL<br>Built: R 4.4.1; ; 2024-07-18 17:12:21 UTC; windows<br>RemoteType: github<br>RemoteHost: api.github.com<br>RemoteRepo: r4ss<br>RemoteUsername: r4ss<br>RemoteRef: HEAD<br>RemoteSha: b6976cd6317d75dddbad9012ca788cd8777254eb<br><p><b>Starting time of model:</b>
+Thu Mar 20 10:36:15 2025</p>
+
+<p><b>Warnings (first 20 from file warnings.sso):</b></p>
+
+<pre>
+Note 1 Information: Max data length bin: 90  < max pop len bins: 110; so will accumulate larger pop len bins
+Note 2 Suggestion: Are you sure you want so few early recrdevs? Better to include in range of main recdevs 1
+Warning 1 : parameter init value is greater than parameter max 0.2 > 0.03 for parm: 1; search for <now check> in echoinput.sso for parm_type
+Warning 2 : parameter init value is greater than parameter max 0.2 > 0.03 for parm: 2; search for <now check> in echoinput.sso for parm_type
+Warning 3 : parameter init value is greater than parameter max 0.2 > 0.03 for parm: 3; search for <now check> in echoinput.sso for parm_type
+Warning 4 : parameter init value is greater than parameter max 0.2 > 0.03 for parm: 4; search for <now check> in echoinput.sso for parm_type
+Warning 5 : parameter init value is less than parameter min -24.6353 < -15 for parm: 2; search for <now check> in echoinput.sso for parm_type
+Warning 6 : parameter init value is less than parameter min -24.4121 < -15 for parm: 8; search for <now check> in echoinput.sso for parm_type
+Warning 7 : parameter init value is less than parameter min -24.4368 < -15 for parm: 14; search for <now check> in echoinput.sso for parm_type
+Warning 8 : Setting in starter does not request all priors, and 3 parameters have priors and are not estimated, so their prior not included in obj_fun.
+Warning 9 : Minimum pop size bin:_10; is > L at Amin for sex: 1; Gpat: 1; L= 0
+Warning 10 : Minimum pop size bin:_10; is > L at Amin for sex: 2; Gpat: 1; L= 0
+Warning 11 : 1st iteration warning: ssb(endyr)/ssb(styr)= 7.17995e-05; suggest start with larger R0 to get near 0.4; or use depletion fleet option
+Warning 12 : poor convergence in Btarget search 0.000380008 0.00094209
+Warning 13 : poor convergence in Fmsy, final dy/dy2= -0.151425
+Warning 14 : Fmsy/mey is <1/3 of Fspr are you sure?  check for convergence 
+Warning 15 : Fmsy.mey is close to max allowed; check for convergence 
+Warning 16 : Final gradient: 236749 is larger than final_conv: 0.0001
+Note 3 Information: A revised protocol for the Fcast_yr specification is available and recommended.
+Note 4 Information:  N parameters that are on or within 1% of min-max bound: 6; check results, variance may be suspect
+ 16 warnings  and 4 notes 
+</pre>

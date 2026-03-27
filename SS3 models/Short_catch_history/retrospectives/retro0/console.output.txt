@@ -1,0 +1,52 @@
+###
+console output
+2025-10-05 18:32:50.958617
+###
+ 
+ reading from starter.ss
+ reading from data file
+Data read successful 999
+
+ reading forecast file 
+ reading from control file
+End of control file successful! 999
+Begin setting up parameters ...  end of parameter section 
+Evaluating biology calculations once ... done
+Starting optimization of 'ss3' in phase 1 of 3 at Sun Oct  5 18:32:43 2025
+phase= 1 | nvar=  3 | iter=  0 | nll=1.34e+06 | mag=6.64e+04 | par[  1]=SR_parm[1]
+phase= 1 | nvar=  3 | iter=  4 | nll=2.28e+01 | mag=8.44e+00 | par[  1]=SR_parm[1]
+phase= 2 | nvar=  3 | iter=  0 | nll=2.28e+01 | mag=8.44e+00 | par[  1]=SR_parm[1]
+phase= 3 | nvar=  9 | iter=  0 | nll=2.28e+01 | mag=6.19e+01 | par[  4]=Q_parm[2]
+phase= 3 | nvar=  9 | iter= 20 | nll=-4.67e+01 | mag=4.93e-01 | par[  9]=selparm[9]
+phase= 3 | nvar=  9 | iter= 40 | nll=-4.67e+01 | mag=9.11e-02 | par[  2]=init_F[1]
+phase= 3 | nvar=  9 | iter= 60 | nll=-4.67e+01 | mag=1.06e-03 | par[  3]=init_F[2]
+phase= 3 | nvar=  9 | iter= 62 | nll=-4.67e+01 | mag=5.48e-05 | par[  9]=selparm[9]
+Optimization completed after 1.1 s with final statistics:
+  nll=-46.720340 | mag=5.47896e-05 | par[  9]=selparm[9]
+
+Warning: the following parameters had issues
+  SR_parm[1] is within 0.1% of upper bound: 0.0001 < 19.9992 < 20
+  init_F[1] is within 0.1% of lower bound: 0 < 4.72298e-09 < 10
+  init_F[2] is within 0.1% of lower bound: 0 < 5.67323e-09 < 10
+  Q_parm[2] is within 0.1% of lower bound: 0 < 0.00481728 < 5
+  Q_parm[4] is within 0.1% of lower bound: 0 < 2.53571e-08 < 5
+
+Wrote first version of output files (before hessian, benchmark, and forecast)
+Calculating Hessian: 1, 2, 3, 4, 5, 6, 7, 8, 9 done (0.39 s) 
+Differentiating 8 derived quantities: 1, 2, 3, 4, 5, 6, 7, 8 done (5.6 s) 
+Inverting Hessian: 1, 2, 3, 4, 5, 6, 7, 8, 9 done (0 s) 
+Starting standard error calculations...  done (0.071 s) 
+Iterations: 136
+Finished forecast
+Writing wtatage.ss_new
+mceval counter: 0
+Finished posteriors
+Finished final writing of report.sso
+Begin writing *.ss_new output files ... Finished writing *.ss_new output files
+
+ N parameters that are on or within 1% of min-max bound: 5
+
+!!  Run has completed  !! 
+!!  See warning.sso for 7 warnings  and 3 notes 
+
+Finished running model 'ss3' after 7.6 s.

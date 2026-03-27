@@ -1,0 +1,15 @@
+Note 1 Information: Max data length bin: 90  < max pop len bins: 100; so will accumulate larger pop len bins
+Note 2 Suggestion: Are you sure you want so few early recrdevs? Better to include in range of main recdevs 1
+Warning 1 : parameter init value is less than parameter min -24.6353 < -15 for parm: 2; search for <now check> in echoinput.sso for parm_type
+Warning 2 : parameter init value is less than parameter min -24.4121 < -15 for parm: 8; search for <now check> in echoinput.sso for parm_type
+Warning 3 : Setting in starter does not request all priors, and 3 parameters have priors and are not estimated, so their prior not included in obj_fun.
+Warning 4 : Minimum pop size bin:_10; is > L at Amin for sex: 1; Gpat: 1; L= 0
+Warning 5 : Maximum pop size bin:_100; is within 5% of L at maxage for sex: 1; Gpat: 1 settle: 1; L= 97.463
+Warning 6 : Minimum pop size bin:_10; is > L at Amin for sex: 2; Gpat: 1; L= 0
+Warning 7 : Maximum pop size bin:_100; is within 5% of L at maxage for sex: 2; Gpat: 1 settle: 1; L= 97.463
+Warning 8 : 1st iteration warning: ssb(endyr)/ssb(styr)= 3.64914e-05; suggest start with larger R0 to get near 0.4; or use depletion fleet option
+Warning 9 : 1st iteration warning: catch logL > 50% total logL; check configuration; suggest start with larger R0
+Warning 10 : Main recdev biasadj is >2 times ratio of rmse to sigmaR
+Note 3 Information: A revised protocol for the Fcast_yr specification is available and recommended.
+Note 4 Information:  N parameters that are on or within 1% of min-max bound: 3; check results, variance may be suspect
+ 10 warnings  and 4 notes 

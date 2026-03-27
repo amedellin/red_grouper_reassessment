@@ -1,0 +1,55 @@
+###
+console output
+2025-12-27 23:31:32.115971
+###
+ 
+ reading from starter.ss
+ reading from data file
+Data read successful 999
+
+ reading forecast file 
+ reading from control file
+End of control file successful! 999
+Begin setting up parameters ...  end of parameter section 
+Evaluating biology calculations once ... done
+Starting optimization of 'ss3' in phase 1 of 4 at Sat Dec 27 23:31:03 2025
+phase= 1 | nvar= 75 | iter=  0 | nll=4.65e+06 | mag=7.42e+06 | par[  1]=SR_parm[1]
+phase= 1 | nvar= 75 | iter= 20 | nll=-4.20e+01 | mag=1.95e+01 | par[  1]=SR_parm[1]
+phase= 1 | nvar= 75 | iter= 40 | nll=-4.20e+01 | mag=1.95e+01 | par[  1]=SR_parm[1]
+Exiting without success due to excessive function evaluations (maxfn=100) | mag=19.4708
+phase= 1 | nvar= 75 | iter= 56 | nll=-4.20e+01 | mag=1.95e+01 | par[  1]=SR_parm[1]
+phase= 2 | nvar= 75 | iter=  0 | nll=-4.20e+01 | mag=1.95e+01 | par[  1]=SR_parm[1]
+phase= 2 | nvar= 75 | iter= 11 | nll=-4.25e+01 | mag=8.28e+00 | par[  1]=SR_parm[1]
+phase= 3 | nvar= 92 | iter=  0 | nll=-4.25e+01 | mag=2.33e+02 | par[ 79]=selparm[3]
+phase= 3 | nvar= 92 | iter= 20 | nll=-6.90e+01 | mag=8.88e+01 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter= 40 | nll=-7.15e+01 | mag=2.97e+01 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter= 60 | nll=-7.20e+01 | mag=6.43e+00 | par[ 85]=selparm[13]
+phase= 3 | nvar= 92 | iter= 80 | nll=-7.70e+01 | mag=7.95e+00 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter=100 | nll=-8.12e+01 | mag=8.91e+00 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter=120 | nll=-8.15e+01 | mag=2.78e+00 | par[ 87]=selparm[15]
+phase= 3 | nvar= 92 | iter=140 | nll=-8.86e+01 | mag=9.87e-01 | par[ 77]=selparm[1]
+phase= 3 | nvar= 92 | iter=159 | nll=-8.86e+01 | mag=1.79e-01 | par[ 87]=selparm[15]
+phase= 4 | nvar= 93 | iter=  0 | nll=-8.98e+01 | mag=3.09e+00 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter= 20 | nll=-9.00e+01 | mag=2.36e+00 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter= 40 | nll=-9.00e+01 | mag=1.48e+00 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter= 60 | nll=-9.00e+01 | mag=1.07e+00 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter= 80 | nll=-9.00e+01 | mag=3.85e-01 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=100 | nll=-9.00e+01 | mag=1.56e-01 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=120 | nll=-9.00e+01 | mag=3.72e-01 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=140 | nll=-9.00e+01 | mag=5.12e-01 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=160 | nll=-9.00e+01 | mag=1.93e-01 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=180 | nll=-9.00e+01 | mag=7.96e-01 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=200 | nll=-9.00e+01 | mag=2.97e-02 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=220 | nll=-9.00e+01 | mag=3.59e-01 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=240 | nll=-9.00e+01 | mag=2.32e-02 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=260 | nll=-9.00e+01 | mag=3.48e-04 | par[ 78]=selparm[1]
+phase= 4 | nvar= 93 | iter=261 | nll=-9.00e+01 | mag=8.78e-05 | par[ 78]=selparm[1]
+Optimization completed after 20 s with final statistics:
+  nll=-89.964814 | mag=8.77946e-05 | par[ 78]=selparm[1]
+
+Warning: the following parameters had issues
+  SR_parm[1] is within 0.1% of upper bound: 0.0001 < 19.9993 < 20
+  selparm[13] is within 0.1% of upper bound: 20 < 82.9704 < 83
+
+Wrote first version of output files (before hessian, benchmark, and forecast)
+Calculating Hessian (93 variables): 20%, 40%, 60%, 80%
