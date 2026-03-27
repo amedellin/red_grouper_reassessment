@@ -1,5 +1,6 @@
 # Overcoming data limitations in fisheries assessment: Integrating historical data and local knowledge 
-# for red grouper (Epinephelus morio) management in the Campeche Bank.                                  <img width="430" height="332" alt="image" src="https://github.com/user-attachments/assets/2d846431-3fc9-4a41-9289-c8f54d3c32d3" />
+# for red grouper (Epinephelus morio) management in the Campeche Bank.                                 
+<img width="230" height="132" alt="image" src="https://github.com/user-attachments/assets/2d846431-3fc9-4a41-9289-c8f54d3c32d3" />
 
 Data and code for red grouper fishery re-assessment
 
