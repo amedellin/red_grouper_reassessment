@@ -1,0 +1,106 @@
+# ------------------------------------------------------------
+# FIGURA 4: qué determina el estado terminal en cada método
+# Versión final
+# ------------------------------------------------------------
+# Los métodos se clasifican por la elección analítica que fija su respuesta:
+#
+#  1. PRIOR AJUSTABLE (CMSY, BSM). Un prior de depleción terminal fijado por
+#     el usuario. Barrerlo cruza el punto de referencia con datos idénticos,
+#     mientras el MSY cambia menos del 6 por ciento: la productividad está
+#     identificada, la depleción no.
+#
+#  2. TRATAMIENTO DEL ÍNDICE (SPiCT). Una capturabilidad o dos a ambos lados
+#     del cambio de programa de muestreo.
+#
+#  3. CONSTRUCCIÓN DEL ÍNDICE (SS3). Si los viajes que no capturaron mero
+#     entran o no. Es una decisión de datos, no de modelación, y es la única
+#     de la figura que cruza las DOS líneas de referencia.
+#
+#  4. NINGUNO (OCOM). Sin prior ajustable de depleción; invariante a M.
+#
+# Con la configuración final SS3 estima 0.115, de modo que el
+# rango se amplía a 0.115-0.32. Lo que los tres comparten es el diagnóstico 
+# cualitativo por debajo de BMSY con sobrepesca en curso.
+# -------------------------------------------------------------
+
+library(ggplot2); library(dplyr); library(ggrepel)
+
+seg <- tribble(
+  ~method, ~driver,              ~x1,   ~y1,   ~x2,   ~y2,   ~lab1,            ~lab2,
+  "CMSY",  "Adjustable prior",   0.322, 1.940, 1.520, 0.249, "endb 0.01-0.3",  "endb 0.1-0.8",
+  "BSM",   "Adjustable prior",   0.726, 0.741, 1.478, 0.329, "endb <= 0.4",    "endb <= 0.8",
+  "SPiCT", "Index treatment",    0.520, 1.050, 0.284, 1.538, "single q",       "split q",
+  "SS3",   "Index construction", 0.150, 2.019, 0.112, 2.481, "positives only", "zeros reconstructed"
+)
+pt <- tribble(~method, ~driver, ~x, ~y, ~lo_x, ~hi_x,
+              "OCOM", "Neither", 0.297, 1.26, 0.064, 0.748)
+
+lbl <- bind_rows(
+  seg %>% transmute(method, driver, x = x1, y = y1, lab = paste0(method, "\n", lab1)),
+  seg %>% transmute(method, driver, x = x2, y = y2, lab = paste0(method, "\n", lab2)),
+  pt  %>% transmute(method, driver, x, y, lab = method))
+
+XMAX <- 1.8; YMAX <- 2.6
+COLS <- c("Adjustable prior"   = "#762a83", "Index treatment" = "#2166ac",
+          "Index construction" = "#b2182b", "Neither"         = "#1b7837")
+LTY  <- c("Adjustable prior" = "dotted", "Index treatment"  = "dashed",
+          "Index construction" = "solid", "Neither"         = "blank")
+
+p <- ggplot() +
+  annotate("rect", xmin = 0, xmax = 1, ymin = 1, ymax = YMAX, fill = "#d73027", alpha = .07) +
+  annotate("rect", xmin = 1, xmax = XMAX, ymin = 1, ymax = YMAX, fill = "#fdae61", alpha = .07) +
+  annotate("rect", xmin = 0, xmax = 1, ymin = 0, ymax = 1, fill = "#fee08b", alpha = .07) +
+  annotate("rect", xmin = 1, xmax = XMAX, ymin = 0, ymax = 1, fill = "#1a9850", alpha = .07) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  
+  geom_segment(data = seg, aes(x1, y1, xend = x2, yend = y2,
+                               colour = driver, linetype = driver),
+               linewidth = 1, arrow = arrow(length = unit(.22, "cm"), type = "closed")) +
+  geom_point(data = seg, aes(x1, y1, colour = driver), size = 3, shape = 1, stroke = 1.2) +
+  geom_point(data = seg, aes(x2, y2, colour = driver), size = 3.6, shape = 19) +
+  
+  geom_errorbar(data = pt, aes(y = y, xmin = lo_x, xmax = hi_x, colour = driver),
+                 height = 0, linewidth = .9,orientation="y") +
+  geom_point(data = pt, aes(x, y, colour = driver), size = 4.8, shape = 18) +
+  
+  geom_text_repel(data = lbl, aes(x, y, label = lab, colour = driver),
+                  size = 3, lineheight = .9, box.padding = .5,
+                  min.segment.length = 0, segment.colour = "grey65") +
+  
+  scale_colour_manual(values = COLS, name = "Terminal status determined by:",
+                      breaks = names(COLS)) +
+  scale_linetype_manual(values = LTY, guide = "none") +
+  coord_cartesian(xlim = c(0, XMAX), ylim = c(0, YMAX), expand = FALSE) +
+  labs(x = expression(B/B[MSY]), y = expression(F/F[MSY])) +
+  theme_bw(base_size = 12) +
+  theme(panel.grid = element_blank(), legend.position = "bottom",
+        legend.title = element_text(face = "bold"))
+
+ggsave("Fig_method_comparison.png", p, width = 8.5, height = 7, dpi = 300)
+p
+
+# ------------------------------------------------------------
+# 
+# Terminal stock status across assessment methods, classified by the
+# analytical choice that determines the estimate. For CMSY and BSM (dotted)
+# the segments span the range obtained by varying the prior on terminal
+# depletion with all data held fixed; for SPiCT (dashed), fitting the
+# abundance index with one versus two catchabilities; for Stock Synthesis
+# (solid), whether trips that landed no red grouper are included in the
+# index. Segments are sensitivity sweeps, not confidence intervals. OCOM
+# (diamond; horizontal bar = 95% CI on B/BMSY) exposes no adjustable
+# depletion prior and is invariant to natural mortality across M = 0.15-0.30.
+# Only the Stock Synthesis comparison crosses both reference lines:
+# including or excluding zero-catch trips changes the diagnosis from a
+# recovered stock to one that is overfished with overfishing occurring,
+# using the same model, the same catch series and the same underlying
+# records. The three estimates that depend on no adjustable assumption —
+# OCOM (0.30), SPiCT with a split index (0.28) and Stock Synthesis with
+# zero-catch trips reconstructed (0.44) — differ in magnitude but agree in
+# placing the stock below BMSY with overfishing in progress, whereas the two
+# that expose a depletion prior span both quadrants. Note that OCOM's
+# invariance does not imply absence of assumptions: its saturation prior
+# derives from a meta-analytic relationship calibrated on other stocks and
+# is not accessible to the user.
+# ------------------------------------------------------------
