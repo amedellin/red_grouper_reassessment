@@ -11,21 +11,17 @@ de México, Carretera Mérida-Tetiz, Km 4, CP 97357, Ucú, Yucatán, México
 * Corresponding author 
 
 Abstract
-Data-limited fisheries present significant challenges for quantitative stock assessment and sustainable management. This study addresses the multifaceted nature of "data-limited" classifications, which encompass deficiencies in data quantity, quality, and type, alongside limitations in resources. We investigate these complexities through a case study of the red grouper (Epinephelus morio) fishery on the Campeche Bank, Mexico. Despite decades of research and management, the stock has been persistently classified as declining while maintaining sustained yields, suggesting potential issues in assessment approaches. We reconstructed historical catch series (1950-2023) by integrating diverse data sources and validating them with local ecological knowledge from experienced fishers. We applied an integrated assessment model (Stock Synthesis) incorporating fishing gear selectivity and biological parameters, and compared its outputs with data-limited methods (SPiCT, BSM, LBSPR, CMSY and OCOM) to compare how model selection and parameter assumptions influence stock status estimates. Our analysis indicates the red grouper stock experienced severe depletion from 1950-1998, followed by gradual recovery. Current status estimates suggest the stock is approaching sustainable levels (B/BMSY ≈ 1), contrasting sharply with surplus production and catch-only methods that indicate continued depletion. This research underscores the critical importance of comprehensive data integration, including catch statistics, biological parameters, fishing gear selectivity, and local knowledge, for developing resilient management strategies. We emphasize that gear selectivity improvements targeting larger individuals could enhance yield while supporting stock recovery.
+Data-limited fisheries present significant stock assessment challenges. We investigated these complexities using the red grouper (Epinephelus morio) fishery on the Campeche Bank, Mexico, which is persistently classified as declining despite sustained yields. We reconstructed a 1950–2023 catch series using diverse data and local ecological knowledge. An integrated assessment model (Stock Synthesis), incorporating gear selectivity and sex-change dynamics, was compared against several data-limited methods (SPiCT, BSM, LBSPR, CMSY, OCOM). We found that stock status estimates depend more on abundance index construction and model assumptions than on the model family itself. Using a refined index accounting for zero-catch trips and vessel effects, Stock Synthesis estimated the stock at B/BMSY=0.112 and F/FMSY=2.48, consistently placing it below B/BMSY with overfishing occurring. Conversely, catch-based methods like CMSY relied heavily on user-set depletion priors; altering this prior shifted B/BMSY from 0.32 to 1.52, demonstrating that while productivity is identifiable, depletion is not. Models lacking adjustable priors (OCOM, SPiCT, Stock Synthesis) consistently estimated B/BMSY between 0.15 and 0.44, whereas methods using depletion priors spanned both sides of the reference point. Ultimately, analytical choices, rather than data alone, drive reported stock status, making sensitivity analyses essential. Because current data cannot resolve all uncertainties, we recommend robust management actions: modifying artisanal hook sizes and implementing targeted monitoring programs designed to generate the specific data these assessments lack.
 
 History of the red grouper fishery.
 <img width="974" height="379" alt="image" src="https://github.com/user-attachments/assets/87e9c5dd-54d8-4879-bc07-4297ec75f3b9" />
 Historical timeline of red grouper (Epinephelus morio) fishery in Yucatán, showing total catches (blue line), major environmental events (gray annotations), management interventions (text boxes), and fleet capacity changes (colored boxes at bottom). The period 1999-2003 corresponds to the rapid SPR increase observed in the stock assessment model, coinciding with implementation of NFA 2000, seasonal closures, red tide events, and substantial catch reductions. Post-2003 management intensification might have maintained reduced fishing mortality through extended seasonal closures, updated regulations, and eventual fleet capacity reductions.
 
-<img width="839" height="794" alt="image" src="https://github.com/user-attachments/assets/3d65609a-6401-474a-95fb-9815c38a58bc" />
+Terminal stock status across assessment methods, classified by the analytical choice that determines the estimate.
+<img width="2550" height="2100" alt="Figure4_method_comparison_R5" src="https://github.com/user-attachments/assets/814d074c-79e5-4c40-bfed-55af384e5e5d" />
 
-Red grouper stock status.
-
-<img width="1304" height="862" alt="image" src="https://github.com/user-attachments/assets/4d819429-3d33-4277-b96b-c8b619106a8e" />
-
-Relative red grouper spawning stock biomass.
-
-<img width="1648" height="830" alt="image" src="https://github.com/user-attachments/assets/49d520f7-7ebb-4a78-b2d4-c77b4923c4ff" />
 
 Biomass estimates from other studies comapred to current estimates.
+<img width="4200" height="3300" alt="Figure3_biomass_comparison_R5" src="https://github.com/user-attachments/assets/dc8ff7cf-ee53-45fc-85c8-5ba43b5fdef4" />
+
 
