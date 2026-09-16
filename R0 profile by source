@@ -1,0 +1,102 @@
+# ------------------------------------------------------------
+# Descomposición del perfil de R0 por fuente de datos
+# Configuración base final (jit_frec99/r03)
+# ------------------------------------------------------------
+# El perfil agregado tiene mínimo interior en log(R0) = 10.375, coincidente
+# con el valor estimado libremente, de modo que la escala está identificada.
+# Esta descomposición muestra qué componentes sostienen ese mínimo y si
+# coinciden entre sí, lo que distingue un óptimo respaldado por los datos de
+# un punto de equilibrio entre fuentes en conflicto.
+#
+# REQUIERE los directorios de prof_final ya corridos.
+# ------------------------------------------------------------
+
+library(r4ss); library(dplyr); library(tidyr); library(ggplot2)
+
+ROOT <- dirname(base_dir)
+PDIR <- file.path(ROOT, "prof_final")
+EY   <- 2023
+TOL  <- 1e-3
+
+pdirs <- sort(list.dirs(PDIR, recursive = FALSE))
+stopifnot(length(pdirs) > 3)
+cat("puntos del perfil:", length(pdirs), "\n")
+
+one <- function(d) {
+  o <- tryCatch(SS_output(d, verbose = FALSE, printstats = FALSE, covar = FALSE),
+                error = function(e) NULL)
+  if (is.null(o)) return(NULL)
+  r0 <- o$parameters["SR_LN(R0)", "Value"]
+  lu <- o$likelihoods_used; dq <- o$derived_quants
+  gv <- function(x) if (x %in% rownames(lu)) lu[x, "values"] else NA
+  
+  agg <- data.frame(R0 = r0, fleet = "all",
+                    component = c("Total","Survey","Length_comp","Recruitment"),
+                    nll = c(gv("TOTAL"), gv("Survey"), gv("Length_comp"), gv("Recruitment")))
+  bf <- o$likelihoods_by_fleet; byf <- NULL
+  if (!is.null(bf) && nrow(bf)) {
+    fl <- setdiff(names(bf), c("Label","ALL"))
+    byf <- bf %>% filter(Label %in% c("Surv_like","Length_like")) %>%
+      pivot_longer(all_of(fl), names_to = "fleet", values_to = "nll") %>%
+      mutate(R0 = r0,
+             component = recode(Label, Surv_like = "Survey", Length_like = "Length_comp")) %>%
+      select(R0, fleet, component, nll) %>% filter(!is.na(nll), nll != 0)
+  }
+  bind_rows(agg, byf) %>%
+    mutate(grad = o$maximum_gradient_component,
+           B_Bmsy = dq[paste0("Bratio_", EY), "Value"] / dq["B_MSY/SSB_unfished", "Value"],
+           B0 = dq["SSB_unfished", "Value"])
+}
+
+prof <- bind_rows(lapply(pdirs, one)) %>% filter(grad < TOL)
+stopifnot(nrow(prof) > 0)
+
+# la segunda cuenca (R0 >= 10.75) se excluye: es otra solución, 25 unidades peor
+prof <- prof %>% filter(R0 <= 10.70)
+cat("puntos convergidos en la cuenca principal:", n_distinct(prof$R0), "\n\n")
+
+mins <- prof %>%
+  group_by(fleet, component) %>% filter(n() >= 4) %>%
+  summarise(R0_min = R0[which.min(nll)], rango = diff(range(nll)), .groups = "drop") %>%
+  mutate(discrimina = case_when(rango > 5 ~ "yes", rango > 1 ~ "weakly", TRUE ~ "no")) %>%
+  arrange(desc(rango))
+
+cat("=== R0 preferido por cada fuente ===\n")
+print(as.data.frame(mins), digits = 4, row.names = FALSE)
+
+R0tot <- mins$R0_min[mins$fleet == "all" & mins$component == "Total"]
+disc  <- mins %>% filter(discrimina == "yes",
+                         !(fleet == "all" & component %in% c("Total","Survey","Length_comp")))
+cat(sprintf("\nR0 del óptimo total: %.3f\n", R0tot))
+if (nrow(disc) >= 2) {
+  cat(sprintf("fuentes que discriminan: %s\n", paste(disc$fleet, disc$component, collapse = " | ")))
+  cat(sprintf("dispersión entre ellas: %.3f unidades de log(R0)\n", diff(range(disc$R0_min))))
+  cat("Una dispersión pequeña indica que el mínimo está respaldado por fuentes\n")
+  cat("que coinciden, no producido por el equilibrio entre fuerzas opuestas.\n")
+} else if (nrow(disc) == 1) {
+  cat("una sola fuente discrimina materialmente sobre la escala:",
+      disc$fleet, disc$component, "\n")
+}
+
+# --- figura ---
+pl <- prof %>%
+  filter(!(fleet == "all" & component %in% c("Survey","Length_comp"))) %>%
+  group_by(fleet, component) %>% filter(n() >= 4, diff(range(nll)) > 1) %>%
+  mutate(dnll = nll - min(nll)) %>% ungroup() %>%
+  mutate(serie = ifelse(component == "Total", "Total",
+                        ifelse(fleet == "all", component, paste0(component, " - ", fleet))))
+
+p <- ggplot(pl, aes(R0, dnll, colour = serie, linewidth = serie == "Total")) +
+  geom_line() + geom_point(size = 1.2) +
+  geom_hline(yintercept = 1.92, linetype = "dashed", colour = "grey50") +
+  scale_linewidth_manual(values = c(`FALSE` = .7, `TRUE` = 1.5), guide = "none") +
+  coord_cartesian(ylim = c(0, min(40, max(pl$dnll)))) +
+  labs(x = expression(log(R[0])), y = expression(Delta*" negative log-likelihood"),
+       colour = NULL, title = "Likelihood profile by data source, base configuration") +
+  theme_bw(base_size = 12) +
+  theme(panel.grid.minor = element_blank(), legend.position = "right")
+ggsave(file.path(ROOT, "Fig_R0_by_source.png"), p, width = 9, height = 6, dpi = 300)
+
+write.csv(mins, file.path(ROOT, "perfil_R0_por_fuente_final.csv"), row.names = FALSE)
+cat("\nguardado: Fig_R0_by_source.png | perfil_R0_por_fuente_final.csv\n")
+cat("Los valores de R0_min y rango alimentan la Tabla S1.4.\n")
