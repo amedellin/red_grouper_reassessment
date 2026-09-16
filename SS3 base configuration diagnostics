@@ -1,0 +1,223 @@
+#--------------------------------------------------------------------------
+# Con el indice corregido observamos que el parámetro FracFemale_GP_1 estaba en 0.5,
+# de modo que la mitad de los reclutas entraba al modelo como machos. Bajo
+# hermafroditismo protogínico secuencial todos los individuos reclutan como
+# hembras y una fracción cambia de sexo al envejecer, de modo que el valor
+# correcto es el máximo que admite el parámetro (0.99). Verificado en la
+# estructura por edades: con 0.5 las edades 0 y 1 tenían el mismo número de
+# ambos sexos; con 0.99 la proporción de hembras en condición virgen es
+# 83.8%, consistente con una supervivencia de 15% a la
+# edad de inflexión (8.3 años) bajo M = 0.225.
+#
+# Correr en secuencia: jitter, perfil de R0 con descomposición por fuente,
+# retrospectivo y sensibilidad a steepness. Cada bloque puede ejecutarse por
+# separado. Los cuatro usan EY = 2023 y leen F_2023 sin dividir, porque
+# F_std_basis = 2 hace que ese valor ya sea el cociente con FMSY.
+# Base configuration: jit_frac99/r03
+# -----------------------------------------------------------------------
+
+library(r4ss); library(parallel); library(dplyr); library(tidyr); library(ggplot2)
+
+ROOT  <- dirname(base_dir)
+SRC   <- file.path(ROOT, "fracfem_test")      # configuración con FracFemale = 0.99
+EY    <- 2023
+NCORE <- max(1, min(detectCores() - 1, 8))
+TOL   <- 1e-3
+BTOL  <- 0.005
+
+inputs_of <- function(d) {
+  f <- list.files(d, full.names = TRUE, include.dirs = FALSE)
+  f[!grepl("Report\\.sso|CompReport|covar\\.sso|ss3\\.par_[0-9]+\\.sso$|\\.ss_new$|\\.ss_old$|echoinput|warning",
+           basename(f), ignore.case = TRUE)]
+}
+sp <- function(x) strsplit(trimws(sub("#.*", "", x)), "[ \t]+")[[1]]
+at_bound <- function(o) {
+  p <- o$parameters %>% filter(!is.na(Phase), Phase > 0, !is.na(Min), !is.na(Max))
+  if (!nrow(p)) return(character(0))
+  r <- p$Max - p$Min
+  p$Label[(abs(p$Value-p$Min)/r < BTOL) | (abs(p$Value-p$Max)/r < BTOL)]
+}
+grab <- function(d, rep = NA) {
+  o <- tryCatch(SS_output(d, verbose=FALSE, printstats=FALSE, covar=FALSE), error=function(e) NULL)
+  if (is.null(o)) return(data.frame(rep = rep, logL = NA))
+  dq <- o$derived_quants; b <- at_bound(o)
+  data.frame(rep = rep, logL = o$likelihoods_used["TOTAL","values"],
+             grad = o$maximum_gradient_component,
+             R0 = o$parameters["SR_LN(R0)","Value"],
+             B0 = dq["SSB_unfished","Value"], SSB = dq[paste0("SSB_",EY),"Value"],
+             B_Bmsy = dq[paste0("Bratio_",EY),"Value"]/dq["B_MSY/SSB_unfished","Value"],
+             F_Fmsy = dq[paste0("F_",EY),"Value"],
+             SPR = 1 - dq[paste0("SPRratio_",EY),"Value"],
+             MSY = dq["Dead_Catch_MSY","Value"], OFL = dq[paste0("OFLCatch_",EY+1),"Value"],
+             n_bound = length(b), bounds = paste(b, collapse="; "), stringsAsFactors = FALSE)
+}
+runx <- function(d) {
+  s <- SS_readstarter(file.path(d,"starter.ss"), verbose=FALSE)
+  s$init_values_src <- 0; SS_writestarter(s, d, overwrite=TRUE, verbose=FALSE)
+  r4ss::run(dir=d, exe="ss3", skipfinished=FALSE, show_in_console=FALSE)
+}
+par_run <- function(dirs) {
+  cl <- makeCluster(min(NCORE, length(dirs))); clusterExport(cl, "dirs", envir=environment())
+  invisible(parLapply(cl, dirs, function(x)
+    try(r4ss::run(dir=x, exe="ss3", skipfinished=FALSE, show_in_console=FALSE), silent=TRUE)))
+  stopCluster(cl)
+}
+
+stopifnot(dir.exists(SRC))
+ref <- grab(SRC)
+cat(sprintf("REFERENCIA: logL %.3f | R0 %.3f | B/Bmsy %.3f | F/Fmsy %.3f | SPR %.3f | B0 %.0f\n",
+            ref$logL, ref$R0, ref$B_Bmsy, ref$F_Fmsy, ref$SPR, ref$B0))
+if (ref$n_bound > 0) cat("  en límite:", ref$bounds, "\n")
+
+# verificación de la razón sexual
+o0 <- SS_output(SRC, verbose=FALSE, printstats=FALSE, covar=FALSE)
+na <- subset(o0$natage, `Beg/Mid`=="B" & Era=="VIRG")
+ag <- grep("^[0-9]+$", names(na), value=TRUE)
+cat(sprintf("  hembras en condición virgen: %.1f%% (esperado ~84%% bajo protoginia)\n",
+            100*sum(na[na$Sex==1, ag])/sum(na[, ag])))
+
+# ============================================================
+# 1. JITTER
+# ============================================================
+cat("\n######## JITTER ########\n")
+jr <- file.path(ROOT, "jit_frac99"); unlink(jr, recursive=TRUE); dir.create(jr)
+jd <- file.path(jr, sprintf("r%02d", 1:30))
+for (i in seq_along(jd)) {
+  dir.create(jd[i]); file.copy(inputs_of(SRC), jd[i], overwrite=TRUE)
+  s <- SS_readstarter(file.path(jd[i],"starter.ss"), verbose=FALSE)
+  s$jitter_fraction <- 0.10; s$init_values_src <- 0; s$seed <- i*1000
+  SS_writestarter(s, jd[i], overwrite=TRUE, verbose=FALSE)
+}
+par_run(jd)
+jt <- bind_rows(lapply(seq_along(jd), function(i) grab(jd[i], i))) %>%
+  mutate(valido = !is.na(logL) & grad < TOL & n_bound == 0 &
+           B0 > 0.2*ref$B0 & B0 < 5*ref$B0)
+v <- jt %>% filter(valido) %>% arrange(logL)
+cat(sprintf("válidas %d de 30 | mejor logL %.3f (referencia %.3f)\n",
+            nrow(v), if (nrow(v)) v$logL[1] else NA, ref$logL))
+if (any(jt$n_bound > 0, na.rm=TRUE))
+  cat("  en límite:", paste(unique(jt$bounds[jt$n_bound>0 & nzchar(jt$bounds)]), collapse=" | "), "\n")
+if (nrow(v)) {
+  cat("\n=== VALORES PARA EL MANUSCRITO ===\n")
+  f <- function(n, x, d=3) cat(sprintf("  %-8s %.*f  [%.*f - %.*f]\n", n, d, x[1], d, min(x), d, max(x)))
+  f("B/Bmsy", v$B_Bmsy); f("F/Fmsy", v$F_Fmsy); f("SPR", v$SPR)
+  cat(sprintf("  %-8s %.0f  [%.0f - %.0f]\n", "B0", v$B0[1], min(v$B0), max(v$B0)))
+  cat(sprintf("  %-8s %.0f\n", "SSB", v$SSB[1]))
+  cat(sprintf("  %-8s %.0f  [%.0f - %.0f]\n", "MSY", v$MSY[1], min(v$MSY), max(v$MSY)))
+  cat(sprintf("  %-8s %.0f  [%.0f - %.0f]\n", "OFL", v$OFL[1], min(v$OFL), max(v$OFL)))
+  cat(sprintf("  %% bajo BMSY %.0f | %% con sobrepesca %.0f\n",
+              100*mean(v$B_Bmsy<1), 100*mean(v$F_Fmsy>1)))
+  BEST <- jd[v$rep[1]]
+} else BEST <- SRC
+cat("mejor réplica:", BEST, "\n")
+write.csv(jt, file.path(ROOT, "jitter_frac99.csv"), row.names=FALSE)
+
+# ============================================================
+# 2. PERFIL DE R0 (arranque desde el .par de la mejor réplica)
+# ============================================================
+cat("\n######## PERFIL DE R0 ########\n")
+VEC <- seq(9.50, 11.00, by = 0.125)
+pdir <- file.path(ROOT, "prof_frac99"); unlink(pdir, recursive=TRUE); dir.create(pdir)
+ctlname <- SS_readstarter(file.path(BEST,"starter.ss"), verbose=FALSE)$ctlfile
+src <- file.path(BEST, "control.ss_new"); if (!file.exists(src)) src <- file.path(BEST, ctlname)
+Lc <- readLines(src); iR0 <- grep("SR_LN\\(R0\\)", Lc)[1]; stopifnot(!is.na(iR0))
+pd <- file.path(pdir, sprintf("p%06.3f", VEC))
+for (k in seq_along(VEC)) {
+  dir.create(pd[k], recursive=TRUE); file.copy(inputs_of(BEST), pd[k], overwrite=TRUE)
+  if (file.exists(file.path(BEST,"ss3.par"))) file.copy(file.path(BEST,"ss3.par"), pd[k], overwrite=TRUE)
+  L <- Lc; g <- sp(L[iR0]); g[3] <- sprintf("%.4f", VEC[k]); g[4] <- g[3]; g[7] <- "-1"
+  L[iR0] <- paste(paste(g, collapse=" "), sub("^[^#]*","",L[iR0]))
+  writeLines(L, file.path(pd[k], ctlname))
+  s <- SS_readstarter(file.path(pd[k],"starter.ss"), verbose=FALSE)
+  s$init_values_src <- if (file.exists(file.path(pd[k],"ss3.par"))) 1 else 0
+  s$prior_like <- 0; s$ctlfile <- ctlname
+  SS_writestarter(s, pd[k], overwrite=TRUE, verbose=FALSE)
+}
+par_run(pd)
+
+pf <- bind_rows(lapply(seq_along(VEC), function(k) {
+  o <- tryCatch(SS_output(pd[k], verbose=FALSE, printstats=FALSE, covar=FALSE), error=function(e) NULL)
+  if (is.null(o)) return(NULL)
+  lu <- o$likelihoods_used; dq <- o$derived_quants
+  gv <- function(x) if (x %in% rownames(lu)) lu[x,"values"] else NA
+  data.frame(R0=VEC[k], logL=gv("TOTAL"), Survey=gv("Survey"), Len=gv("Length_comp"),
+             Recr=gv("Recruitment"), grad=o$maximum_gradient_component,
+             B0=dq["SSB_unfished","Value"],
+             B_Bmsy=dq[paste0("Bratio_",EY),"Value"]/dq["B_MSY/SSB_unfished","Value"],
+             F_Fmsy=dq[paste0("F_",EY),"Value"], MSY=dq["Dead_Catch_MSY","Value"])
+})) %>% filter(grad < TOL)
+pf$d <- pf$logL - min(pf$logL, na.rm=TRUE)
+print(as.data.frame(pf %>% select(R0, d, B0, B_Bmsy, F_Fmsy, MSY)), digits=4, row.names=FALSE)
+main <- pf %>% filter(B_Bmsy < 1)                     # cuenca principal
+ci <- main$R0[main$d < 1.92]
+cat(sprintf("\nmínimo %.3f | IC %.3f-%.3f | B0 en IC %.0f-%.0f (%.0f%%)\n",
+            main$R0[which.min(main$d)], min(ci), max(ci),
+            min(main$B0[main$R0 %in% ci]), max(main$B0[main$R0 %in% ci]),
+            100*(max(main$B0[main$R0 %in% ci])/min(main$B0[main$R0 %in% ci]) - 1)))
+cat(sprintf("componentes: Recruitment %.1f | Survey %.1f | Length %.1f  (rango de NLL)\n",
+            diff(range(main$Recr)), diff(range(main$Survey)), diff(range(main$Len))))
+write.csv(pf, file.path(ROOT, "perfil_frac99.csv"), row.names=FALSE)
+
+# ============================================================
+# 3. RETROSPECTIVO
+# ============================================================
+cat("\n######## RETROSPECTIVO ########\n")
+rr <- file.path(ROOT, "retro_frac99"); unlink(rr, recursive=TRUE); dir.create(rr)
+rd <- file.path(rr, sprintf("peel%d", 0:5))
+for (i in 0:5) {
+  dir.create(rd[i+1]); file.copy(inputs_of(BEST), rd[i+1], overwrite=TRUE)
+  s <- SS_readstarter(file.path(rd[i+1],"starter.ss"), verbose=FALSE)
+  s$retro_yr <- -i; s$init_values_src <- 0
+  SS_writestarter(s, rd[i+1], overwrite=TRUE, verbose=FALSE)
+}
+par_run(rd)
+peel <- bind_rows(lapply(0:5, function(i) {
+  o <- tryCatch(SS_output(rd[i+1], verbose=FALSE, printstats=FALSE, covar=FALSE), error=function(e) NULL)
+  if (is.null(o)) return(NULL)
+  ey <- EY - i; dq <- o$derived_quants
+  data.frame(peel=i, endyr=ey, grad=o$maximum_gradient_component,
+             SSB=dq[paste0("SSB_",ey),"Value"],
+             B_Bmsy=dq[paste0("Bratio_",ey),"Value"]/dq["B_MSY/SSB_unfished","Value"],
+             F_Fmsy=dq[paste0("F_",ey),"Value"])
+}))
+print(as.data.frame(peel), digits=4, row.names=FALSE)
+rho <- mean((peel$B_Bmsy[-1] - peel$B_Bmsy[1]) / peel$B_Bmsy[1])
+cat(sprintf("\nconvergidos %d de 6 | Mohn's rho (B/Bmsy) = %+.4f | umbral +/-0.20\n",
+            sum(peel$grad < TOL), rho))
+write.csv(peel, file.path(ROOT, "retro_frac99.csv"), row.names=FALSE)
+
+# ============================================================
+# 4. STEEPNESS
+# ============================================================
+cat("\n######## STEEPNESS ########\n")
+HV <- c(0.60, 0.70, 0.75, 0.84, 0.90)
+hr <- file.path(ROOT, "steep_frac99"); unlink(hr, recursive=TRUE); dir.create(hr)
+ih <- grep("SR_BH_steep|steep", Lc)[1]
+hd <- file.path(hr, sprintf("h%03.0f", HV*100))
+for (k in seq_along(HV)) {
+  dir.create(hd[k]); file.copy(inputs_of(BEST), hd[k], overwrite=TRUE)
+  L <- Lc; g <- sp(L[ih]); g[3] <- sprintf("%.4f", HV[k]); g[4] <- g[3]; g[7] <- "-1"
+  L[ih] <- paste(paste(g, collapse=" "), sub("^[^#]*","",L[ih]))
+  writeLines(L, file.path(hd[k], ctlname))
+  s <- SS_readstarter(file.path(hd[k],"starter.ss"), verbose=FALSE)
+  s$init_values_src <- 0; s$ctlfile <- ctlname
+  SS_writestarter(s, hd[k], overwrite=TRUE, verbose=FALSE)
+}
+par_run(hd)
+ht <- bind_rows(lapply(seq_along(HV), function(k) {
+  g <- grab(hd[k]); g$h <- HV[k]; g
+}))
+ht <- ht[, c("h","logL","grad","B0","B_Bmsy","F_Fmsy","SPR","MSY","OFL","n_bound")]
+print(as.data.frame(ht), digits = 4, row.names = FALSE)
+
+hv <- ht[ht$grad < TOL & !is.na(ht$grad), ]
+if (nrow(hv) >= 2) {
+  rg <- function(x) sprintf("%.3f-%.3f (%.0f%%)", min(x), max(x), 100*(max(x)/min(x)-1))
+  cat(sprintf("\nB/Bmsy %s | F/Fmsy %s | SPR %s\n", rg(hv$B_Bmsy), rg(hv$F_Fmsy), rg(hv$SPR)))
+  cat(sprintf("B0 %.0f-%.0f (%.0f%%) | MSY %.0f-%.0f (%.0f%%) | todas bajo BMSY: %s\n",
+              min(hv$B0), max(hv$B0), 100*(max(hv$B0)/min(hv$B0)-1),
+              min(hv$MSY), max(hv$MSY), 100*(max(hv$MSY)/min(hv$MSY)-1), all(hv$B_Bmsy < 1)))
+}
+
+write.csv(ht, file.path(ROOT, "steepness_frac99.csv"), row.names=FALSE)
+cat("\nCompletado. Archivos: jitter_frac99.csv, perfil_frac99.csv, retro_frac99.csv, steepness_frac99.csv\n")
