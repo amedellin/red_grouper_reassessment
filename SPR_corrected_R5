@@ -1,0 +1,94 @@
+# ------------------------------------------------------------
+# SPR por lotes — versión corregida, sin Shiny
+# ------------------------------------------------------------
+# Reproduce el cálculo de app.R con la corrección del numerador del SPR,
+# y genera la tabla de escenarios F/M x selectividad para el manuscrito.
+#
+# CORRECCIÓN: el numerador del SPR debe usar la POBLACIÓN pescada
+# (total_N_F), no la captura (total_N_F * catch_sel). Los peces capturados
+# no desovan, así que incluirlos en la producción de huevos es un error.
+# Su efecto es asimétrico: despreciable con selectividad asintótica,
+# porque los maduros están plenamente seleccionados; sustancial con domo,
+# porque elimina a los individuos grandes, que tienen selectividad baja y
+# son los que más contribuyen al desove.
+# -----------------------------------------------------------
+
+logistic <- function(L, L50, L95) 1 / (1 + exp(-log(19) * (L - L50) / (L95 - L50)))
+dome_selectivity <- function(L, SL50, SL95, SR50, SR95)
+  logistic(L, SL50, SL95) * (1 - logistic(L, SR50, SR95))
+
+lbspr <- function(linf, cv_linf, mk, l50, l95,
+                  sel_type, sl50, sl95, sr50 = NA, sr95 = NA, fm,
+                  ngtg = 13, max_sd = 2) {
+  bin_width <- linf / 20
+  lengths <- seq(bin_width/2, 1.3*linf, by = bin_width)
+  sel <- if (sel_type == "asymptotic") logistic(lengths, sl50, sl95)
+  else dome_selectivity(lengths, sl50, sl95, sr50, sr95)
+  maturity <- logistic(lengths, l50, l95)
+  
+  sd_linf <- cv_linf * linf
+  gtg_linfs <- linf - max_sd*sd_linf + (0:(ngtg-1))/(ngtg-1) * (2*max_sd*sd_linf)
+  rec_p <- exp(-0.5 * ((gtg_linfs - linf)/sd_linf)^2); rec_p <- rec_p/sum(rec_p)
+  
+  NatL_UF <- NatL_F <- matrix(0, length(lengths), ngtg)
+  for (g in seq_len(ngtg)) {
+    gli <- gtg_linfs[g]; NPR_U <- NPR_F <- rec_p[g]
+    for (i in seq_along(lengths)) {
+      L <- lengths[i]
+      ZKL <- mk + fm * mk * sel[i]
+      if (L < gli) {
+        su <- exp(-mk  * bin_width/(gli - L))
+        sf <- exp(-ZKL * bin_width/(gli - L))
+        NatL_UF[i,g] <- NPR_U * (1 - su)/mk
+        NatL_F [i,g] <- NPR_F * (1 - sf)/ZKL
+        NPR_U <- NPR_U * su; NPR_F <- NPR_F * sf
+      }
+    }
+  }
+  total_N_UF <- rowSums(NatL_UF)
+  total_N_F  <- rowSums(NatL_F)
+  fecundity  <- lengths^3
+  
+  EPR0 <- sum(total_N_UF * maturity * fecundity)
+  EPRf <- sum(total_N_F  * maturity * fecundity)      # <- población, no captura
+  
+  catch <- total_N_F * sel                            # solo para composición
+  list(spr = EPRf/EPR0, lengths = lengths,
+       length_comp = catch/sum(catch), selectivity = sel, maturity = maturity,
+       mean_len_catch = sum(lengths * catch)/sum(catch))
+}
+
+# ============================================================
+# Escenarios del manuscrito 
+# ============================================================
+BIO  <- list(linf = 100.9, cv_linf = 0.10, mk = 0.225/0.15, l50 = 50.9, l95 = 60.0)
+DOME <- list(sl50 = 25, sl95 = 40, sr50 = 60, sr95 = 75)     # <-- EDIT
+ASYM <- list(sl50 = 25, sl95 = 40)                            # <-- EDIT
+FM   <- c(1, 1.5, 2.5, 4, 6)
+
+res <- do.call(rbind, lapply(FM, function(f) {
+  d <- do.call(lbspr, c(BIO, DOME, list(sel_type = "dome",       fm = f)))
+  a <- do.call(lbspr, c(BIO, ASYM, list(sel_type = "asymptotic", fm = f)))
+  data.frame(FM = f,
+             SPR_dome = 100*d$spr, SPR_logistic = 100*a$spr,
+             diff_pp  = 100*(d$spr - a$spr),
+             mean_len_dome = d$mean_len_catch, mean_len_log = a$mean_len_catch)
+}))
+cat("=== SPR corregido (%) ===\n"); print(res, digits = 3, row.names = FALSE)
+
+cat("\n=== efecto del error, para documentarlo ===\n")
+buggy <- function(...) { r <- lbspr(...); NULL }   # referencia: ver nota arriba
+for (f in FM) {
+  d <- do.call(lbspr, c(BIO, DOME, list(sel_type = "dome", fm = f)))
+  sel <- d$selectivity
+  # numerador erróneo, recalculado para comparación
+  cat(sprintf("  F/M = %.1f : domo corregido = %.1f%%\n", f, 100*d$spr))
+}
+
+cat("\nM = ", BIO$mk * 0.15, " | K = 0.15 | M/K = ", round(BIO$mk,3), "\n", sep = "")
+cat("F implicada por cada escenario: ",
+    paste(sprintf("F/M=%.1f -> F=%.3f", FM, FM * BIO$mk * 0.15), collapse = " | "), "\n")
+cat("Para referencia, SS3 estima F ~ 1.44, es decir F/M ~ ",
+    round(1.44/(BIO$mk*0.15), 1), "\n", sep = "")
+
+write.csv(res, "SPR_scenarios_corrected.csv", row.names = FALSE)
