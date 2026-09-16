@@ -1,0 +1,234 @@
+# ── MODELO BASE ──────────────────────────────────────────────────────────────
+BASE <- "C:/Kraken/MeroPYuc/SS-DL-tool-master/Scenarios/jit_frac99/r03"  
+mb   <- SS_output(BASE, verbose = FALSE, printstats = FALSE, covar = FALSE)
+
+dq <- mb$derived_quants
+gv <- function(lab) dq[lab, "Value"]
+EY <- mb$endyr
+
+B0     <- gv("SSB_unfished")
+BMSY   <- gv("SSB_MSY")
+MSY    <- gv("Dead_Catch_MSY")
+SSB_EY <- gv(paste0("SSB_", EY))
+BRATIO <- gv(paste0("Bratio_", EY))
+BBMSY  <- BRATIO / gv("B_MSY/SSB_unfished")
+FFMSY  <- gv(paste0("F_", EY)) 
+OFL    <- gv(paste0("OFLCatch_", EY + 1))
+LOGL   <- mb$likelihoods_used["TOTAL", "values"]
+GRAD   <- mb$maximum_gradient_component
+
+# rangos entre configuraciones convergidas (ver Tabla III)
+MSY_LO <- 10324;  MSY_HI <- 10511
+BB_LO  <- 0.106;  BB_HI  <- 0.112
+FF_LO  <- 2.480;   FF_HI  <- 2.528
+
+cat(sprintf("BASE: logL=%.3f grad=%.2e | B0=%.0f BMSY=%.0f MSY=%.0f\n",
+            LOGL, GRAD, B0, BMSY, MSY))
+cat(sprintf("      SSB_%d=%.0f | B/B0=%.3f | B/BMSY=%.3f | F/FMSY=%.3f | OFL=%.0f\n",
+            EY, SSB_EY, BRATIO, BBMSY, FFMSY, OFL))
+
+# ── biometa.csv (sin cambios respecto a la versión anterior) ─────────────────
+bioss <- read.csv("biometa.csv", sep = ",", header = TRUE)
+bioss2 <- bioss %>%
+  pivot_longer(cols = -year, names_to = "quant.author", values_to = "ton") %>%
+  mutate(Category = case_when(
+    startsWith(quant.author, "B..") ~ "Estimated biomass",
+    grepl("MSY", quant.author)      ~ "MSY",
+    grepl("SSB", quant.author)      ~ "Estimated biomass",
+    TRUE                            ~ "Total catch"))
+
+nmlst <- list(
+  "B..Arreguin.Sanchez..1987."="Arreguin-Sanchez (1987)","B..Blanco.et.al...1980."="Blanco et al (1980)",
+  "B..Buesa..1978."="Buesa (1978)","B..Burgos.et.al...1999."="Burgos et al (1999)",
+  "B..Burgos.Rosas.y.Perez.Perez..2006."="Burgos-Rosas & Perez-Perez (2006)",
+  "B..Contreras.et.al...1993."="Contreras et al (1993)","B..Doi.et.al...1981."="Doi et al (1981)",
+  "B..Fuentes.y.Contreras..1986."="Fuentes & Contreras (1986)","B..Garcia.et.al...1986."="Garcia et al (1986)",
+  "B..Gimenez.Hurtado.et.al...2005."="Gimenez-Hurtado et al (2005)",
+  "B..Gonzalez.et.al...1974a."="Gonzalez et al (1974a)","B..Gonzalez.et.al...1974b."="Gonzalez et al (1974b)",
+  "B..Hernandez.et.al...1999."="Hernandez et al (1999)","B..Hernandez.et.al...2010."="Hernandez et al (2010)",
+  "B..Klima..1976."="Klima (1976)","B..Monroy..1998."="Monroy-Garcia (1998)",
+  "B..Monroy.Garcia.et.al...2013."="Monroy-Garcia et al (2013)","B..Moreno.et.al...1991."="Moreno et al (1991)",
+  "B..Moreno.et.al...1995."="Moreno et al (1995)","B..Moreno.et.al...1997."="Moreno et al (1997)",
+  "B..present.study"="Present study (Stock biomass)","B..Seijo..1986."="Seijo (1986)",
+  "B..Valdes.et.al...1989."="Valdes et al (1989)","B..Echazabal.Salazar.et.al...2021."="Echazaba-Salazar et al (2021)",
+  "MSY.Arreguin.Sanchez..1987."="Arreguin-Sanchez (1987)","MSY.Blanco.et.al...1980."="Blanco et al (1980)",
+  "MSY.Buesa..1978."="Buesa (1978)","MSY.Burgos.et.al...1999."="Burgos et al (1999)",
+  "MSY.Burgos.Rosas.y.Perez.Perez..2006."="Burgos-Rosas & Perez-Perez (2006)",
+  "MSY.Contreras.et.al...1993."="Contreras et al (1993)","MSY.Doi.et.al...1981."="Doi et al (1981)",
+  "MSY.Fuentes.y.Contreras..1986."="Fuentes & Contreras (1986)","MSY.Garcia.et.al...1986."="Garcia et al (1986)",
+  "MSY.Gimenez.Hurtado.et.al...2005."="Gimenez-Hurtado et al (2005)",
+  "MSY.Gonzalez.et.al...1974a."="Gonzalez et al (1974a)","MSY.Gonzalez.et.al...1974b."="Gonzalez et al (1974b)",
+  "MSY.Hernandez.et.al...1999."="Hernandez et al (1999)","MSY.Hernandez.et.al...2010."="Hernandez et al (2010)",
+  "MSY.Klima..1976."="Klima (1976)","MSY.Monroy..1998."="Monroy-Garcia (1998)",
+  "MSY.Monroy.Garcia.et.al...2013."="Monroy-Garcia et al (2013)","MSY.Moreno.et.al...1991."="Moreno et al (1991)",
+  "MSY.Moreno.et.al...1995."="Moreno et al (1995)","MSY.Moreno.et.al...1997."="Moreno et al (1997)",
+  "MSY.present.study"="Present study (MSY)","MSY.Seijo..1986."="Seijo (1986)",
+  "MSY.Valdes.et.al...1989."="Valdes et al (1989)","MSY.Echazabal.Salazar.et.al...2021."="Echazaba-Salazar et al (2021)",
+  "SSB..present.study"="Present study (Spawning stock biomass)","total.catch"="Total catch")
+
+bioss2$author <- "no text"
+maval <- match(as.character(bioss2$quant.author), names(nmlst))
+bioss2$author[!is.na(maval)] <- unlist(nmlst)[maval[!is.na(maval)]]
+bioss2$source <- as.factor(ifelse(
+  bioss2$author %in% c("Present study (MSY)","Present study (Stock biomass)",
+                       "Present study (Spawning stock biomass)"), "Present study",
+  ifelse(bioss2$author == "Total catch", "Present study", "Past studies")))
+bioss2 <- filter(bioss2, Category != "Total catch")
+
+author_nums <- data.frame(author = c(
+  "Gonzalez et al (1974a)","Gonzalez et al (1974b)","Klima (1976)","Buesa (1978)",
+  "Blanco et al (1980)","Doi et al (1981)","Seijo (1986)","Garcia et al (1986)",
+  "Fuentes & Contreras (1986)","Arreguin-Sanchez (1987)","Valdes et al (1989)",
+  "Moreno et al (1991)","Contreras et al (1993)","Moreno et al (1995)",
+  "Moreno et al (1997)","Monroy-Garcia (1998)","Burgos et al (1999)",
+  "Hernandez et al (1999)","Gimenez-Hurtado et al (2005)",
+  "Burgos-Rosas & Perez-Perez (2006)","Hernandez et al (2010)",
+  "Monroy-Garcia et al (2013)","Echazaba-Salazar et al (2021)"), num = 1:23)
+
+bio_hist <- bioss2 %>%
+  filter(Category == "Estimated biomass", source == "Past studies", !is.na(ton), ton > 0) %>%
+  mutate(ton_k = ton/1000) %>% left_join(author_nums, by = "author")
+
+msy_hist <- bioss2 %>%
+  filter(Category == "MSY", source == "Past studies", !is.na(ton), ton > 0) %>%
+  mutate(ton_k = ton/1000) %>% left_join(author_nums, by = "author") %>%
+  group_by(author, num) %>%
+  summarise(yr_lo = min(year), yr_hi = max(year), msy_k = mean(ton_k), .groups = "drop")
+
+# ── SERIES DEL MODELO BASE ───────────────────────────────────────────────────
+ts_A <- mb$timeseries %>%
+  filter(Yr >= 1950, Seas == 1) %>%
+  mutate(Bio_all_t = Bio_all/1000, SSB_t = SpawnBio/1000,
+         Catch_t = rowSums(select(., starts_with("dead(B)")), na.rm = TRUE)/1000)
+
+# sex ratio del MISMO modelo (transición sexual activa)
+sxcols <- grep("SmryNum_SX:", names(mb$timeseries), value = TRUE)
+stopifnot(length(sxcols) >= 2)
+ts_D <- mb$timeseries %>%
+  filter(Yr >= 1950, Seas == 1) %>%
+  mutate(sex_ratio = .data[[sxcols[1]]] / (.data[[sxcols[1]]] + .data[[sxcols[2]]]) * 100)
+
+sr_unfished <- ts_D$sex_ratio[which.min(ts_D$Yr)]
+pk       <- ts_D %>% filter(Yr >= 1990, Yr <= 2015) %>% slice_max(sex_ratio, n = 1)
+sr_peak  <- pk$sex_ratio; yr_peak <- pk$Yr
+sr_last  <- ts_D$sex_ratio[ts_D$Yr == EY]
+delta_pp <- round(sr_peak - sr_unfished, 1)
+cat(sprintf("Sex ratio — unfished: %.1f%% | peak: %.1f%% (%d) | %d: %.1f%%\n",
+            sr_unfished, sr_peak, yr_peak, EY, sr_last))
+
+# ── COLORES Y TEMA (sin cambios) ─────────────────────────────────────────────
+col_total<-"#c0392b"; col_ssb<-"#e8a090"; col_sex<-"#27ae60"
+col_msy<-"#2980b9";  col_lit<-"darkgray"; col_catch<-"#b0bec5"
+x_lim <- c(1950, 2026); x_br <- seq(1950, 2025, 10)
+
+theme_f3 <- theme_bw(base_size=11) +
+  theme(panel.grid.minor=element_blank(), panel.grid.major.x=element_line(color="grey93"),
+        axis.title=element_text(size=10), plot.title=element_text(size=9.5, face="bold"),
+        axis.text.x=element_blank(), axis.ticks.x=element_blank())
+theme_f3_x <- theme_f3 + theme(axis.text.x=element_text(size=9), axis.ticks.x=element_line())
+vlines <- list(geom_vline(xintercept=1999, linetype="dotted", color="grey50", linewidth=0.7),
+               geom_vline(xintercept=2009, linetype="dotted", color="grey50", linewidth=0.7))
+
+# ── PANEL A ──────────────────────────────────────────────────────────────────
+bio_hist_start <- bio_hist %>% group_by(author, num) %>%
+  slice_min(year, n=1, with_ties=FALSE) %>% ungroup()
+last_yr <- max(ts_A$Yr)
+y_total <- ts_A$Bio_all_t[ts_A$Yr==last_yr]; y_ssb <- ts_A$SSB_t[ts_A$Yr==last_yr]
+
+p_bio <- ggplot() +
+  geom_line(data=bio_hist, aes(year, ton_k, group=author),
+            color=col_lit, linewidth=0.7, alpha=0.8) +
+  geom_point(data=bio_hist_start, aes(year, ton_k),
+             color=col_lit, size=2.0, shape=22, fill="white", stroke=0.6) +
+  geom_text(data=bio_hist_start, aes(year, ton_k+5, label=num), size=2.5, color=col_lit) +
+  vlines +
+  geom_hline(yintercept=BMSY/1000, linetype="dashed", color=col_ssb, linewidth=0.8, alpha=0.9) +
+  annotate("text", x=1955, y=BMSY/1000+15,
+           label=sprintf("BMSY = %s t", format(round(BMSY), big.mark=",")),
+           size=2.7, hjust=1, color=col_ssb) +
+  geom_line(data=ts_A, aes(Yr, Bio_all_t), color=col_total, linewidth=1.8) +
+  geom_line(data=ts_A, aes(Yr, SSB_t), color=col_ssb, linewidth=1.5, linetype="dashed") +
+  annotate("text", x=last_yr-1, y=y_total+10, label="Stock biomass\n(present study)",
+           hjust=1, size=2.6, color=col_total, fontface="bold") +
+  annotate("text", x=last_yr-1, y=y_ssb-12,
+           label="Female spawning\nbiomass (present study)",
+           hjust=1, size=2.6, color=col_ssb, fontface="bold") +
+  annotate("text", x=2000, y=max(ts_A$Bio_all_t)*0.93, label="Trawl\nban",
+           size=2.4, hjust=0, color="grey40") +
+  annotate("text", x=2010, y=max(ts_A$Bio_all_t)*0.93, label="NOM-065",
+           size=2.4, hjust=0, color="grey40") +
+  scale_x_continuous(limits=x_lim, breaks=x_br) +
+  scale_y_continuous(labels=label_comma()) +
+  labs(x=NULL, y="Biomass (×10³ t)",
+       title="A) Stock biomass — base configuration vs. historical estimates") +
+  theme_f3 + theme(legend.position="none")
+
+# ── PANEL B ──────────────────────────────────────────────────────────────────
+p_sex <- ggplot(ts_D, aes(Yr, sex_ratio)) +
+  vlines +
+  geom_ribbon(aes(ymin=sr_unfished, ymax=sex_ratio), fill=col_sex, alpha=0.18) +
+  geom_hline(yintercept=sr_unfished, linetype="dashed", color="grey35", linewidth=0.8) +
+  geom_line(color=col_sex, linewidth=1.4) +
+  annotate("segment", x=yr_peak, xend=yr_peak, y=sr_unfished, yend=sr_peak,
+           arrow=arrow(length=unit(0.15,"cm"), ends="both"), color=col_sex, linewidth=0.7) +
+  annotate("text", x=yr_peak-6, y=(sr_unfished+sr_peak)/2,
+           label=sprintf("+%.1f pp", delta_pp), size=2.5, color=col_sex, fontface="bold") +
+  annotate("text", x=yr_peak+0.5, y=sr_peak+1,
+           label=sprintf("Peak: %.1f%%\n(%d)", sr_peak, yr_peak),
+           size=2.5, hjust=0, color=col_sex) +
+  annotate("text", x=2025, y=sr_unfished-1.2,
+           label=sprintf("Unfished: %.1f%%", sr_unfished),
+           size=2.6, hjust=1, color="grey35", fontface="italic") +
+  annotate("text", x=EY-5, y=sr_last+1.5,
+           label=sprintf("%d: %.1f%%", EY, sr_last), size=2.5, color="grey40") +
+  scale_x_continuous(limits=x_lim, breaks=x_br) +
+  scale_y_continuous(labels=function(x) paste0(x,"%")) +
+  labs(x=NULL, y="Females (%\nof total numbers)",
+       title=sprintf("B) Protogynous demographic signal (unfished: %.1f%% female)",
+                     sr_unfished)) +
+  theme_f3
+
+# ── PANEL C ──────────────────────────────────────────────────────────────────
+p_msy <- ggplot() +
+  vlines +
+  geom_area(data=ts_A, aes(Yr, Catch_t), fill=col_catch, alpha=0.85) +
+  geom_line(data=ts_A, aes(Yr, Catch_t), color="grey50", linewidth=0.4) +
+  geom_segment(data=msy_hist, aes(x=yr_lo, xend=yr_hi, y=msy_k, yend=msy_k),
+               color=col_lit, linewidth=0.9) +
+  geom_text(data=msy_hist %>% slice_min(yr_lo, with_ties=FALSE, by=num),
+            aes(yr_lo-0.5, msy_k+0.3, label=num), size=2.2, color=col_lit, hjust=1) +
+  annotate("rect", xmin=-Inf, xmax=Inf, ymin=MSY/1000, ymax=MSY_HI/1000,
+           fill=col_msy, alpha=0.18) +
+  geom_hline(yintercept=MSY/1000, color=col_msy, linewidth=1.5) +
+  annotate("text", x=2025, y=MSY_HI/1000+0.6,
+           label=sprintf("MSY = %s t\n(range %s-%s across\nconverged configurations)",
+                         format(round(MSY), big.mark=","),
+                         format(MSY_LO, big.mark=","), format(MSY_HI, big.mark=",")),
+           size=2.5, hjust=1, color=col_msy) +
+  scale_x_continuous(limits=x_lim, breaks=x_br) +
+  scale_y_continuous(labels=label_comma()) +
+  labs(x="Year", y="Catch / MSY\n(×10³ t)",
+       title="C) Catch history and MSY comparison") +
+  theme_f3_x
+
+# ── ENSAMBLAR ────────────────────────────────────────────────────────────────
+fig3r7 <- p_bio / p_sex / p_msy +
+  plot_layout(heights=c(2.2, 1, 1)) +
+  plot_annotation(caption = sprintf(paste(
+    "All panels — base configuration (reconstructed 2000-%d index plus published 1984-2011 series as a",
+    "separate survey; sex transition active with fixed parameters):\nlogL=%.3f | gradient=%.2e |",
+    "B0=%s t | BMSY=%s t | SSB_%d=%s t | B/B0=%.3f | B/BMSY=%.2f | F/FMSY=%.2f | OFL_%d=%s t |",
+    "MSY=%s t | Kobe: overfished with overfishing\nAcross converged configurations: B/BMSY %.2f-%.2f,",
+    "F/FMSY %.1f-%.1f, MSY %s-%s t. Absolute scale is not identified (Supplementary Material S1.3);",
+    "SSB counts females only when sex transition is active."),
+    EY, LOGL, GRAD,
+    format(round(B0), big.mark=","), format(round(BMSY), big.mark=","),
+    EY, format(round(SSB_EY), big.mark=","), BRATIO, BBMSY, FFMSY,
+    EY+1, format(round(OFL), big.mark=","), format(round(MSY), big.mark=","),
+    BB_LO, BB_HI, FF_LO, FF_HI,
+    format(MSY_LO, big.mark=","), format(MSY_HI, big.mark=",")),
+    theme = theme(plot.caption=element_text(size=7.5, color="grey50")))
+
+ggsave("Figure3_R5.png",  fig3r7, width=14, height=11, dpi=300, bg="white")
+ggsave("Figure3_final.tiff", fig3, width=14, height=11, dpi=300, bg="white")
+cat("Figure 3 saved.\n")
