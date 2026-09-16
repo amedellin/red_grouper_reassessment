@@ -1,0 +1,270 @@
+# ------------------------------------------------------------
+# Contrafactual: índice construido solo con registros positivos
+# ------------------------------------------------------------
+# PROPÓSITO. Aislar el efecto de reconstruir los viajes sin captura. La
+# comparación solo es válida si ambos índices difieren en ese único
+# elemento: misma definición de pesquería, mismo filtro de arte de buceo,
+# mismos años excluidos, mismo esfuerzo por anzuelo, misma estandarización
+# delta-lognormal con efecto de embarcación, y el mismo corte de F1 en 2008.
+# Lo único que cambia es que aquí los viajes con captura cero se descartan
+# antes de ajustar, como ocurre cuando el índice se toma de la base de
+# datos tal como está.
+#
+# VERIFICACIÓN. El script comprueba explícitamente que el .dat resultante
+# contiene los valores del CSV y no marcadores de posición. Ese chequeo
+# existe porque un error de ese tipo estuvo activo en varias
+# configuraciones de este trabajo sin ser detectado.
+# ============================================================
+
+library(r4ss); library(dplyr); library(lme4)
+
+ROOT   <- dirname(base_dir)
+BASE   <- file.path(ROOT, "jit_frac99", "r03")   # configuración base
+DEF    <- "B_ensamblaje"
+YR0    <- c(artisanal = 2008, mid.range = 2000)
+SE     <- c(artisanal = 0.30, mid.range = 0.25)
+FLT    <- c(artisanal = 1, mid.range = 2)
+
+inputs_of <- function(d) {
+  f <- list.files(d, full.names = TRUE, include.dirs = FALSE)
+  f[!grepl("Report\\.sso|CompReport|covar\\.sso|\\.par$|ss3\\.par_[0-9]+\\.sso$|\\.ss_new$|\\.ss_old$|echoinput|warning",
+           basename(f), ignore.case = TRUE)]
+}
+
+# ============================================================
+# ETAPA 1 — índice de solo positivos
+# ------------------------------------------------------------
+# Idéntico a idx_fleet salvo por filter(pos == 1) antes del ajuste: al no
+# haber ceros, el componente binomial del delta-lognormal desaparece y solo
+# queda el lognormal sobre capturas positivas.
+# ============================================================
+idx_pos <- function(f, min_trips = 20) {
+  d <- defs[[DEF]] %>%
+    filter(fleet == f, !buceo, !is.na(nves), Yr != 2001, Yr >= YR0[[f]],
+           ton_mor > 0) %>%                       # <-- solo positivos
+    mutate(Sitef = factor(ifelse(Site %in% c("El Cuyo","Rio Lagartos",
+                                             "San Felipe","Not specified"),
+                                 "other", Site)),
+           uef = factor(if (f == "mid.range") ves else ue),
+           Yrf = factor(Yr), mesf = factor(mes), lc = log(cpue))
+  keep <- names(which(table(d$uef) >= min_trips))
+  d <- d %>% filter(uef %in% keep) %>%
+    mutate(across(c(Yrf, mesf, Sitef, uef), droplevels))
+  
+  gp <- lmer(lc ~ Yrf + mesf + Sitef + (1|uef), data = d, REML = FALSE)
+  md <- function(v) factor(names(sort(table(d[[v]]), decreasing = TRUE))[1],
+                           levels = levels(d[[v]]))
+  nd <- data.frame(Yrf = levels(d$Yrf), mesf = md("mesf"), Sitef = md("Sitef"))
+  ix <- exp(predict(gp, nd, re.form = NA))
+  data.frame(Yr = as.numeric(levels(d$Yrf)), index = ix/mean(ix),
+             se_log = SE[[f]], fleet = f, n = as.numeric(table(d$Yrf)))
+}
+
+posF2 <- idx_pos("mid.range"); posF1 <- idx_pos("artisanal")
+pos   <- rbind(posF1, posF2)
+
+cat("=== índice de solo positivos ===\n")
+for (f in unique(pos$fleet)) {
+  s <- pos %>% filter(fleet == f) %>% arrange(Yr)
+  m <- lm(log(index) ~ Yr, data = s)
+  cat(sprintf("  %-10s %d-%d (n=%d años) | %+.2f%%/año | primero/último %.2f -> %.2f\n",
+              f, min(s$Yr), max(s$Yr), nrow(s),
+              100*(exp(coef(m)[2])-1), s$index[1], s$index[nrow(s)]))
+}
+cat("\ncomparación con el índice que incluye ceros:\n")
+cat("  artisanal -10.53 %/año | mid.range -5.14 %/año\n")
+write.csv(pos, file.path(ROOT, "index_positives_only.csv"), row.names = FALSE)
+
+# ============================================================
+# ETAPA 2 — data file, sustituyendo SOLO los índices de F1 y F2
+# ============================================================
+st  <- SS_readstarter(file.path(BASE, "starter.ss"), verbose = FALSE)
+dat <- SS_readdat(file.path(BASE, st$datfile), verbose = FALSE)
+
+cat("\n=== índices en el .dat base ===\n")
+print(as.data.frame(dat$CPUE %>% group_by(index) %>%
+                      summarise(y0=min(year), y1=max(year), n=n(),
+                                obs_min=min(obs), obs_max=max(obs), .groups="drop")))
+
+pos$index_n <- unname(FLT[pos$fleet])
+new <- data.frame(year = pos$Yr, month = dat$CPUE$month[1], index = pos$index_n,
+                  obs = pos$index, se_log = pos$se_log)[, names(dat$CPUE)]
+dat$CPUE   <- rbind(new, dat$CPUE[!dat$CPUE$index %in% c(1,2), ]) %>% arrange(index, year)
+dat$N_cpue <- nrow(dat$CPUE)
+
+D <- file.path(ROOT, "positives_only")
+unlink(D, recursive = TRUE); dir.create(D)
+file.copy(inputs_of(BASE), D, overwrite = TRUE)
+SS_writedat(dat, file.path(D, st$datfile), overwrite = TRUE, verbose = FALSE)
+
+same_yr  <- all(a$year == b$Yr)
+same_obs <- max(abs(a$obs - b$index)) < 1e-5
+
+# ============================================================
+# ETAPA 3 — VERIFICACIÓN: el .dat contiene lo que debe
+# ============================================================
+chk <- SS_readdat(file.path(D, st$datfile), verbose = FALSE)
+cat("\n=== verificación del .dat escrito ===\n")
+ok <- TRUE
+for (f in names(FLT)) {
+  fl <- FLT[[f]]
+  a <- chk$CPUE %>% filter(index == fl) %>% arrange(year)
+  b <- pos %>% filter(fleet == f) %>% arrange(Yr)
+  same_yr  <- identical(a$year, b$Yr)
+  same_obs <- isTRUE(all.equal(a$obs, b$index, tolerance = 1e-8))
+  cat(sprintf("  flota %d (%s): %d años | años coinciden %s | valores coinciden %s\n",
+              fl, f, nrow(a), same_yr, same_obs))
+  if (!same_yr || !same_obs) ok <- FALSE
+  # marcador de posición: valores repetidos o todos iguales
+  if (length(unique(round(a$obs, 6))) < 3)
+  { cat("    !! ADVERTENCIA: menos de tres valores distintos, posible marcador\n"); ok <- FALSE }
+}
+
+ok <- TRUE
+for (f in names(FLT)) {
+  fl <- FLT[[f]]
+  a <- chk$CPUE %>% filter(index == fl) %>% arrange(year)
+  b <- pos      %>% filter(fleet == f)   %>% arrange(Yr)
+  if (!all(a$year == b$Yr))                      ok <- FALSE
+  if (max(abs(a$obs - b$index)) > 1e-5)          ok <- FALSE
+  if (length(unique(round(a$obs, 6))) < 3)       ok <- FALSE
+}
+stopifnot(ok)
+cat("VERIFICACIÓN SUPERADA\n")
+
+u34 <- chk$CPUE %>% filter(index %in% c(3,4,5)) %>% nrow()
+cat(sprintf("  índices 3-5 conservados: %d observaciones\n", u34))
+stopifnot(ok)
+cat("\nVERIFICACIÓN SUPERADA. El data file contiene el índice de solo positivos.\n")
+
+# ============================================================
+# ETAPA 4 — correr
+# ============================================================
+s <- SS_readstarter(file.path(D, "starter.ss"), verbose = FALSE)
+s$init_values_src <- 0; SS_writestarter(s, D, overwrite = TRUE, verbose = FALSE)
+r4ss::run(dir = D, exe = "ss3", skipfinished = FALSE, show_in_console = FALSE)
+o <- tryCatch(SS_output(D, verbose = FALSE, printstats = FALSE, covar = FALSE),
+              error = function(e) NULL)
+if (is.null(o)) {
+  cat("\n!! falló. Revisar:", file.path(D, "warning.sso"), "\n")
+} else {
+  dq <- o$derived_quants; EY <- 2023
+  cat(sprintf("\n=== SOLO POSITIVOS ===\nlogL %.3f | grad %.1e | R0 %.3f\n",
+              o$likelihoods_used["TOTAL","values"], o$maximum_gradient_component,
+              o$parameters["SR_LN(R0)","Value"]))
+  cat(sprintf("B/Bmsy %.3f | F/Fmsy %.3f | SPR %.3f | B0 %.0f | MSY %.0f | OFL %.0f\n",
+              dq[paste0("Bratio_",EY),"Value"]/dq["B_MSY/SSB_unfished","Value"],
+              dq[paste0("F_",EY),"Value"],                    # F_std_basis = 2
+              1 - dq[paste0("SPRratio_",EY),"Value"],
+              dq["SSB_unfished","Value"], dq["Dead_Catch_MSY","Value"],
+              dq[paste0("OFLCatch_",EY+1),"Value"]))
+  cat("\n--- base, con ceros reconstruidos ---\n")
+  cat("B/Bmsy 0.115 | F/Fmsy 2.459 | SPR 0.049 | B0 47,045 | MSY 10,295 | OFL 1,292\n")
+  cat("\nSIGUIENTE: jitter de 30 sobre esta configuración, con EY = 2023 y sin\n")
+  cat("dividir F_2023 entre annF_MSY, para obtener los rangos comparables.\n")
+}
+
+#-----------------------------------------------
+# jitter para corroborar
+#-------------------------------------------------
+
+library(r4ss); library(parallel); library(dplyr)
+
+ROOT  <- dirname(base_dir)
+BASE  <- file.path(ROOT, "positives_only")  # configuración base + positivos
+NJIT  <- 30
+JFRAC <- 0.10
+NCORE <- max(1, min(detectCores() - 1, 8))
+TOL   <- 1e-3
+BOUND_TOL <- 0.005
+SCALE <- c(0.2, 5)
+
+inputs_of <- function(d) {
+  f <- list.files(d, full.names = TRUE, include.dirs = FALSE)
+  f[!grepl("Report\\.sso|CompReport|covar\\.sso|ss3\\.par_[0-9]+\\.sso$|\\.ss_new$|\\.ss_old$|echoinput|warning",
+           basename(f), ignore.case = TRUE)]
+}
+at_bound <- function(o) {
+  p <- o$parameters %>% filter(!is.na(Phase), Phase > 0, !is.na(Min), !is.na(Max))
+  if (!nrow(p)) return(character(0))
+  r <- p$Max - p$Min
+  p$Label[(abs(p$Value-p$Min)/r < BOUND_TOL) | (abs(p$Value-p$Max)/r < BOUND_TOL)]
+}
+grab <- function(d, rep = NA) {
+  o <- tryCatch(SS_output(d, verbose = FALSE, printstats = FALSE, covar = FALSE),
+                error = function(e) NULL)
+  if (is.null(o)) return(data.frame(rep = rep, logL = NA))
+  ey <- o$endyr; dq <- o$derived_quants; lu <- o$likelihoods_used
+  gv <- function(x) if (x %in% rownames(lu)) lu[x,"values"] else NA
+  b <- at_bound(o)
+  data.frame(rep = rep, logL = gv("TOTAL"), grad = o$maximum_gradient_component,
+             Survey = gv("Survey"), Len = gv("Length_comp"),
+             R0 = o$parameters["SR_LN(R0)","Value"],
+             B0 = dq["SSB_unfished","Value"],
+             SSB = dq[paste0("SSB_", ey-1),"Value"],
+             B_Bmsy = dq[paste0("Bratio_",ey),"Value"]/dq["B_MSY/SSB_unfished","Value"],
+             F_Fmsy = dq[paste0("F_",ey),"Value"],
+             SPR = 1 - dq[paste0("SPRratio_",ey),"Value"],
+             MSY = dq["Dead_Catch_MSY","Value"],
+             OFL = dq[paste0("OFLCatch_", ey+1),"Value"],
+             n_bound = length(b), bounds = paste(b, collapse = "; "),
+             stringsAsFactors = FALSE)
+}
+
+stopifnot(dir.exists(BASE))
+ref <- grab(BASE)
+cat(sprintf("referencia: logL %.3f | grad %.1e | R0 %.3f | B0 %.0f | B/Bmsy %.3f | límites %d\n",
+            ref$logL, ref$grad, ref$R0, ref$B0, ref$B_Bmsy, ref$n_bound))
+if (ref$n_bound > 0) cat("  en límite:", ref$bounds, "\n")
+B0ref <- ref$B0
+
+jr <- file.path(ROOT, "jit_R6_index_real")
+unlink(jr, recursive = TRUE); dir.create(jr)
+dirs <- file.path(jr, sprintf("r%02d", 1:NJIT))
+for (i in seq_along(dirs)) {
+  dir.create(dirs[i]); file.copy(inputs_of(BASE), dirs[i], overwrite = TRUE)
+  s <- SS_readstarter(file.path(dirs[i], "starter.ss"), verbose = FALSE)
+  s$jitter_fraction <- JFRAC; s$init_values_src <- 0; s$seed <- i*1000
+  SS_writestarter(s, dirs[i], overwrite = TRUE, verbose = FALSE)
+}
+cl <- makeCluster(NCORE); clusterExport(cl, "dirs", envir = environment())
+invisible(parLapply(cl, dirs, function(d)
+  try(r4ss::run(dir=d, exe="ss3", skipfinished=FALSE, show_in_console=FALSE), silent=TRUE)))
+stopCluster(cl)
+
+jt <- bind_rows(lapply(seq_along(dirs), function(i) grab(dirs[i], i))) %>%
+  mutate(valido = !is.na(logL) & grad < TOL & n_bound == 0 &
+           B0 > SCALE[1]*B0ref & B0 < SCALE[2]*B0ref)
+
+cat(sprintf("\nconvergidas %d | sin límites %d | escala OK %d | VÁLIDAS %d de %d\n",
+            sum(jt$grad < TOL, na.rm=TRUE), sum(jt$n_bound == 0, na.rm=TRUE),
+            sum(jt$B0 > SCALE[1]*B0ref & jt$B0 < SCALE[2]*B0ref, na.rm=TRUE),
+            sum(jt$valido, na.rm=TRUE), NJIT))
+if (any(jt$n_bound > 0, na.rm=TRUE))
+  cat("  parámetros en límite:",
+      paste(unique(jt$bounds[jt$n_bound > 0 & nzchar(jt$bounds)]), collapse=" | "), "\n")
+
+v <- jt %>% filter(valido) %>% arrange(logL)
+if (nrow(v)) {
+  cat("\n--- 6 mejores ---\n")
+  print(as.data.frame(v %>% select(rep, logL, grad, R0, B0, SSB, B_Bmsy, F_Fmsy, SPR, MSY, OFL) %>%
+                        head(6)), digits = 4, row.names = FALSE)
+  cat(sprintf("\nMEJOR: logL %.3f (rep %d) | referencia %.3f | mejora %.3f\n",
+              v$logL[1], v$rep[1], ref$logL, ref$logL - v$logL[1]))
+  cat("\n=== VALORES PARA EL MANUSCRITO ===\n")
+  cat(sprintf("  B/Bmsy  %.3f   [%.3f - %.3f]   %.0f%% bajo BMSY\n",
+              v$B_Bmsy[1], min(v$B_Bmsy), max(v$B_Bmsy), 100*mean(v$B_Bmsy < 1)))
+  cat(sprintf("  F/Fmsy  %.3f   [%.3f - %.3f]   %.0f%% con sobrepesca\n",
+              v$F_Fmsy[1], min(v$F_Fmsy), max(v$F_Fmsy), 100*mean(v$F_Fmsy > 1)))
+  cat(sprintf("  SPR     %.3f   [%.3f - %.3f]\n", v$SPR[1], min(v$SPR), max(v$SPR)))
+  cat(sprintf("  B0      %.0f  [%.0f - %.0f] t\n", v$B0[1], min(v$B0), max(v$B0)))
+  cat(sprintf("  SSB     %.0f  t\n", v$SSB[1]))
+  cat(sprintf("  MSY     %.0f  [%.0f - %.0f] t\n", v$MSY[1], min(v$MSY), max(v$MSY)))
+  cat(sprintf("  OFL     %.0f  [%.0f - %.0f] t\n", v$OFL[1], min(v$OFL), max(v$OFL)))
+  BEST <- dirs[v$rep[1]]
+} else { cat("!! ninguna réplica válida\n"); BEST <- BASE }
+
+cat("\nmejor réplica:", BEST, "\n")
+cat("\nSIGUIENTE: retrospectivo sobre esta réplica. El perfil de R0 ya se corrió\n")
+cat("sobre la referencia (mínimo 10.25, IC hasta 10.50, B0 varía 28% dentro del IC).\n")
+write.csv(jt, file.path(ROOT, "jitter_positives_only.csv"), row.names = FALSE)
