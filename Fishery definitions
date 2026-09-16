@@ -1,0 +1,581 @@
+# ------------------------------------------------------------
+# Defining the red grouper fishery, and recovering true zeros
+# ------------------------------------------------------------
+# The database covers ALL fisheries (octopus, tuna...), so "every trip
+# without grouper" is NOT a zero. A zero is a trip that plausibly fished
+# the grouper grounds with the grouper gear and landed none.
+#
+# Strategy: use grouper trips to derive the co-occurring species assemblage
+# empirically, then treat mid-range trips landing that assemblage but no
+# grouper as genuine zeros. Sensitivity to the definition is reported,
+# because the definition is a judgement call and must be shown to be one.
+# -------------------------------------------------------------
+
+library(dplyr); library(ggplot2)
+
+MORIO <- "Epinephelus morio"
+FLEET <- "mid.range"          # "artisanal" for F1
+
+yuc <- yucatan %>%
+  mutate(trip = paste(FOLIO.AVISO, ANO.CORTE, mes, dia, RNP.ACTIVO))
+
+trips_mero <- unique(yuc$trip[yuc$species == MORIO])
+cat("Viajes con mero:", length(trips_mero),
+    "| viajes totales en la base:", n_distinct(yuc$trip), "\n\n")
+
+# ============================================================
+# A. What actually co-occurs with grouper (your rgfishery, quantified)
+# ============================================================
+perfil <- yuc %>% filter(trip %in% trips_mero, species != MORIO) %>%
+  group_by(species, species.a) %>%
+  summarise(n_trips = n_distinct(trip), .groups = "drop") %>%
+  mutate(pct = 100 * n_trips / length(trips_mero)) %>%
+  arrange(desc(pct))
+cat("=== Especies acompañantes del mero (% de viajes con mero) ===\n")
+print(as.data.frame(head(perfil, 15)) %>% mutate(pct = round(pct, 1)))
+
+UMBRAL   <- 10                                     # % de viajes con mero
+sp_assoc <- perfil$species[perfil$pct >= UMBRAL]
+cat("\nEnsamblaje (>=", UMBRAL, "% de viajes con mero):\n")
+cat(paste(" -", sp_assoc), sep = "\n")
+
+# ============================================================
+# B. Three fishery definitions -> three zero rates
+# ============================================================
+tripdat <- yuc %>% filter(fleet == FLEET) %>%
+  group_by(trip) %>%
+  summarise(Yr = first(ANO.CORTE), mes = first(mes), vessel = first(RNP.ACTIVO),
+            Site = first(Site), nves = max(NUMERO.EMBARCACIONES, na.rm = TRUE),
+            ton_mero  = sum(ton[species == MORIO], na.rm = TRUE),
+            has_mero  = any(species == MORIO),
+            has_assoc = any(species %in% sp_assoc),
+            has_targ  = any(species.a %in% c("01-target", "02-associated")),
+            .groups = "drop")
+
+# vessels that genuinely participate in the fishery (>=20% of their trips)
+vess_mero <- tripdat %>% group_by(vessel) %>%
+  summarise(p = mean(has_mero), n = n(), .groups = "drop") %>%
+  filter(p >= 0.20, n >= 10) %>% pull(vessel)
+
+defs <- list(
+  A_solo_positivos = tripdat %>% filter(has_mero),
+  B_ensamblaje     = tripdat %>% filter(has_mero | has_assoc),
+  C_clasificacion  = tripdat %>% filter(has_mero | has_targ),
+  D_embarcaciones  = tripdat %>% filter(vessel %in% vess_mero))
+
+cat("\n=== Sensibilidad a la definición de pesquería ===\n")
+for (nm in names(defs)) {
+  x <- defs[[nm]]
+  cat(sprintf("%-18s viajes %6d | %% ceros %5.1f\n", nm, nrow(x),
+              100 * mean(!x$has_mero)))
+}
+
+# ============================================================
+# C. THE DECISIVE DIAGNOSTIC — zero rate and CPUE through time
+# ============================================================
+serie <- function(x, lab) {
+  x %>% mutate(cpue = ton_mero / (pmax(nves, 1) * 1500) * 100) %>%
+    group_by(Yr) %>%
+    summarise(n = n(), pct_cero = 100 * mean(ton_mero == 0),
+              cpue = mean(cpue), .groups = "drop") %>%
+    mutate(def = lab)
+}
+tab <- bind_rows(lapply(names(defs), function(n) serie(defs[[n]], n)))
+
+cat("\n=== Tasa de ceros por año (¿sube?) ===\n")
+print(tidyr::pivot_wider(tab %>% select(Yr, def, pct_cero),
+                         names_from = def, values_from = pct_cero) %>%
+        as.data.frame() %>% mutate(across(where(is.numeric), ~round(., 1))))
+
+cat("\n=== Tendencia de cada serie ===\n")
+print(tab %>% group_by(def) %>%
+        summarise(pend_cpue = coef(lm(cpue ~ Yr))[2],
+                  p_cpue    = summary(lm(cpue ~ Yr))$coefficients[2, 4],
+                  pend_cero = coef(lm(pct_cero ~ Yr))[2], .groups = "drop") %>%
+        mutate(across(where(is.numeric), ~signif(., 3))) %>% as.data.frame())
+
+p <- ggplot(tab, aes(Yr, cpue / ave(cpue, def, FUN = mean), colour = def)) +
+  geom_line(linewidth = 0.9) + geom_point(size = 1.1) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(title = "CPUE de mero según la definición de pesquería",
+       subtitle = "A = solo positivos (índice actual). B/C/D reconstruyen ceros.",
+       x = "Año", y = "Índice relativo") +
+  theme_bw(base_size = 12) + theme(legend.position = "bottom")
+ggsave("F2_cpue_definiciones.png", p, width = 9.5, height = 5.5, dpi = 300)
+
+cat("\nLECTURA: si 'pct_cero' SUBE con los años, la proporción de viajes de la\n",
+    "pesquería que encuentran mero está cayendo — señal de abundancia que el\n",
+    "índice de solo-positivos no puede ver. Y si la tendencia de A es positiva\n",
+    "mientras B/C/D son planas o negativas, la recuperación es artefacto de\n",
+    "excluir los ceros.\n")
+
+#----------------------------
+# the bonaci test
+
+mb <- "Mycteroperca bonaci"
+tb <- yuc %>% filter(fleet == "mid.range") %>%
+  group_by(trip) %>%
+  summarise(Yr = first(ANO.CORTE),
+            bonaci = any(species == mb),
+            morio  = any(species == MORIO),
+            ton_morio  = sum(ton[species == MORIO],  na.rm = TRUE),
+            ton_bonaci = sum(ton[species == mb],     na.rm = TRUE),
+            nves = max(NUMERO.EMBARCACIONES, na.rm = TRUE), .groups = "drop") %>%
+  filter(bonaci, !Yr %in% 2002)          # viajes que SÍ pescaron mero (género)
+
+res <- tb %>% group_by(Yr) %>%
+  summarise(n_viajes      = n(),
+            pct_con_morio = 100 * mean(morio),
+            cpue_morio    = mean(ton_morio / (pmax(nves,1)*1500) * 100),
+            ratio_mor_bon = sum(ton_morio) / sum(ton_bonaci), .groups = "drop")
+print(as.data.frame(res))
+for (v in c("pct_con_morio","cpue_morio","ratio_mor_bon")) {
+  m <- lm(res[[v]] ~ res$Yr)
+  cat(sprintf("%-14s pendiente %+9.5f  p = %.3g\n", v, coef(m)[2],
+              summary(m)$coefficients[2,4]))
+}
+
+# ============================================================
+# Control interno E. morio / M. bonaci — por flota y sitio de desembarque
+# ------------------------------------------------------------
+# Restringe a viajes que SÍ capturaron mero del género (bonaci presente):
+# mismo arte, mismos fondos, mismo esfuerzo, misma economía. La sustitución
+# a pulpo no puede explicar una caída aquí.
+#
+# CUIDADO al estratificar:
+#  - n por celda cae mucho -> se exigen mínimos explícitos
+#  - muchas combinaciones flota x sitio -> p-valores corregidos (BH)
+#  - anzuelos imputados difieren por flota (1500 vs 150)
+# ============================================================
+
+library(dplyr)
+
+MORIO <- "Epinephelus morio"
+MB    <- "Mycteroperca bonaci"
+DROP  <- c(2002)          # Isidoro: esfuerzo casi nulo
+MIN_TRIPS_YR <- 10        # viajes con bonaci por año para conservar ese año
+MIN_YEARS    <- 8         # años necesarios para ajustar tendencia
+HOOKS <- c("mid.range" = 500, "artisanal" = 262)   # medianas de permisos   # <- VERIFICA las etiquetas
+
+cat("=== etiquetas de flota en la base ===\n"); print(table(yuc$fleet))
+cat("\n=== sitios (top 15) ===\n"); print(head(sort(table(yuc$Site), decreasing = TRUE), 15))
+
+# ---- tabla a nivel de viaje ----
+trips <- yuc %>%
+  group_by(trip) %>%
+  summarise(fleet = first(fleet), Site = first(Site), Yr = first(ANO.CORTE),
+            nves   = max(NUMERO.EMBARCACIONES, na.rm = TRUE),
+            bonaci = any(species == MB),
+            morio  = any(species == MORIO),
+            ton_morio  = sum(ton[species == MORIO], na.rm = TRUE),
+            ton_bonaci = sum(ton[species == MB],    na.rm = TRUE),
+            .groups = "drop") %>%
+  filter(bonaci, !Yr %in% DROP) %>%
+  mutate(hooks = unname(HOOKS[as.character(fleet)]))
+
+cat("\nViajes con bonaci:", nrow(trips),
+    "| sin anzuelos asignados:", sum(is.na(trips$hooks)), "\n")
+
+# ---- serie anual por estrato ----
+serie <- function(d, keys) {
+  d %>% group_by(across(all_of(keys)), Yr) %>%
+    summarise(n_viajes      = n(),
+              pct_con_morio = 100 * mean(morio),
+              cpue_morio    = mean(ton_morio / (pmax(nves, 1) * hooks) * 100),
+              ratio_mor_bon = sum(ton_morio) / sum(ton_bonaci),
+              .groups = "drop")
+}
+
+fit_tend <- function(d) {
+  out <- data.frame(n_anios = nrow(d), n_viajes = sum(d$n_viajes))
+  for (v in c("pct_con_morio", "cpue_morio", "ratio_mor_bon")) {
+    ok <- is.finite(d[[v]])
+    if (sum(ok) >= MIN_YEARS) {
+      m <- lm(d[[v]][ok] ~ d$Yr[ok]); s <- summary(m)$coefficients
+      out[[paste0(v, "_pend")]] <- s[2, 1]
+      out[[paste0(v, "_p")]]    <- s[2, 4]
+    } else { out[[paste0(v, "_pend")]] <- NA; out[[paste0(v, "_p")]] <- NA }
+  }
+  out
+}
+
+# ============================================================
+# A. Por FLOTA (agregado sobre sitios)
+# ============================================================
+sf <- serie(trips, "fleet")
+cat("\n===== SERIE POR FLOTA =====\n")
+print(as.data.frame(sf), digits = 4)
+
+res_f <- sf %>% filter(n_viajes >= MIN_TRIPS_YR) %>%
+  group_by(fleet) %>% group_modify(~fit_tend(.x)) %>% ungroup()
+cat("\n===== TENDENCIAS POR FLOTA =====\n")
+print(as.data.frame(res_f), digits = 3)
+
+# ============================================================
+# B. Por FLOTA x SITIO
+# ============================================================
+ss <- serie(trips, c("fleet", "Site"))
+res_s <- ss %>% filter(n_viajes >= MIN_TRIPS_YR) %>%
+  group_by(fleet, Site) %>% group_modify(~fit_tend(.x)) %>% ungroup() %>%
+  filter(n_anios >= MIN_YEARS)
+
+# corrección por comparaciones múltiples (Benjamini-Hochberg)
+for (v in c("pct_con_morio", "cpue_morio", "ratio_mor_bon")) {
+  pcol <- paste0(v, "_p")
+  res_s[[paste0(v, "_padj")]] <- p.adjust(res_s[[pcol]], method = "BH")
+}
+
+cat("\n===== TENDENCIAS POR FLOTA x SITIO =====\n")
+cat("(padj = p corregido por comparaciones múltiples, BH)\n\n")
+print(as.data.frame(
+  res_s %>% arrange(fleet, ratio_mor_bon_pend) %>%
+    select(fleet, Site, n_anios, n_viajes,
+           ratio_pend = ratio_mor_bon_pend, ratio_p = ratio_mor_bon_p,
+           ratio_padj = ratio_mor_bon_padj,
+           pct_pend = pct_con_morio_pend, pct_padj = pct_con_morio_padj)),
+  digits = 3)
+
+cat("\n--- resumen del control interno (ratio E. morio / M. bonaci) ---\n")
+cat("  estratos evaluados      :", nrow(res_s), "\n")
+cat("  pendiente negativa      :", sum(res_s$ratio_mor_bon_pend < 0, na.rm = TRUE), "\n")
+cat("  negativa y padj < 0.05  :", sum(res_s$ratio_mor_bon_pend < 0 &
+                                         res_s$ratio_mor_bon_padj < 0.05, na.rm = TRUE), "\n")
+cat("  positiva y padj < 0.05  :", sum(res_s$ratio_mor_bon_pend > 0 &
+                                         res_s$ratio_mor_bon_padj < 0.05, na.rm = TRUE), "\n")
+cat("\nLECTURA: lo informativo es la CONSISTENCIA entre sitios independientes,\n",
+    "no que alguno alcance significancia. Si la mayoría de estratos con datos\n",
+    "suficientes muestran pendiente negativa, la señal es de abundancia.\n")
+
+write.csv(res_s, "bonaci_tendencias_flota_sitio.csv", row.names = FALSE)
+
+#--------------------------------------------------------------
+# the negrillo-boquinete test
+# Contaminación por arte en el control interno E. morio / M. bonaci
+# ------------------------------------------------------------
+# L. maximus (boquinete) se captura con arpón/buceo, no con anzuelo.
+# Si un aviso registra boquinete, ese viaje pudo operar con buceo — arte
+# con selectividad completamente distinta (el buzo VE y ELIGE; el anzuelo no).
+#
+# RIESGO PRINCIPAL: si la proporción de viajes con buceo cambió en el tiempo,
+# eso por sí solo genera tendencia en el ratio sin cambio de abundancia.
+# ============================================================
+
+library(dplyr)
+
+MORIO <- "Epinephelus morio"
+MB    <- "Mycteroperca bonaci"
+BUCEO <- c("Lachnolaimus maximus")                 # amplía si aplica
+OTRO  <- c("Octopus maya")                          # jimba, tampoco anzuelo
+DROP  <- c(2002)
+
+tb <- yuc %>%
+  group_by(trip) %>%
+  summarise(fleet = first(fleet), Site = first(Site), Yr = first(ANO.CORTE),
+            bonaci = any(species == MB),
+            morio  = any(species == MORIO),
+            buceo  = any(species %in% BUCEO),
+            pulpo  = any(species %in% OTRO),
+            n_spp  = n_distinct(species),
+            ton_morio  = sum(ton[species == MORIO], na.rm = TRUE),
+            ton_bonaci = sum(ton[species == MB],    na.rm = TRUE),
+            .groups = "drop") %>%
+  filter(bonaci, !Yr %in% DROP)
+
+cat("Viajes con bonaci:", nrow(tb),
+    "| con boquinete:", sum(tb$buceo), sprintf("(%.1f%%)", 100*mean(tb$buceo)),
+    "| con pulpo:", sum(tb$pulpo), sprintf("(%.1f%%)", 100*mean(tb$pulpo)), "\n\n")
+
+# ============================================================
+# A. ¿Cambia con el tiempo la proporción de viajes con buceo?
+#    (si sí, puede generar tendencia espuria por sí sola)
+# ============================================================
+prop <- tb %>% group_by(fleet, Yr) %>%
+  summarise(n = n(), pct_buceo = 100*mean(buceo), pct_pulpo = 100*mean(pulpo),
+            .groups = "drop")
+cat("=== % de viajes con bonaci que además traen boquinete ===\n")
+print(as.data.frame(tidyr::pivot_wider(prop %>% select(fleet, Yr, pct_buceo),
+                                       names_from = fleet, values_from = pct_buceo)),
+      digits = 3)
+cat("\ntendencia de la contaminación:\n")
+for (f in unique(prop$fleet)) {
+  s <- prop[prop$fleet == f, ]
+  if (nrow(s) >= 8) {
+    m <- lm(pct_buceo ~ Yr, data = s); co <- summary(m)$coefficients
+    cat(sprintf("  %-11s pendiente %+7.3f pp/año  p = %.3g\n", f, co[2,1], co[2,4]))
+  }
+}
+cat("  --> si la pendiente es significativa, la mezcla de artes cambia y\n",
+    "      PUEDE explicar parte de la tendencia del ratio.\n")
+
+# ============================================================
+# B. El ratio, con y sin viajes de buceo
+# ============================================================
+serie <- function(d, lab) {
+  d %>% group_by(fleet, Yr) %>%
+    summarise(n = n(), pct_con_morio = 100*mean(morio),
+              ratio = sum(ton_morio)/sum(ton_bonaci), .groups = "drop") %>%
+    mutate(estrato = lab)
+}
+s_all <- serie(tb,                    "todos")
+s_sin <- serie(tb %>% filter(!buceo), "sin boquinete")
+s_con <- serie(tb %>% filter( buceo), "solo boquinete")
+todo  <- bind_rows(s_all, s_sin, s_con)
+
+cat("\n=== TENDENCIA DEL RATIO por estrato ===\n")
+for (f in unique(todo$fleet)) for (e in unique(todo$estrato)) {
+  s <- todo[todo$fleet == f & todo$estrato == e & is.finite(todo$ratio), ]
+  if (nrow(s) >= 8) {
+    m <- lm(ratio ~ Yr, data = s); co <- summary(m)$coefficients
+    cat(sprintf("  %-11s %-15s n_años=%2d  pendiente %+9.5f  p = %-9.3g cambio %+6.1f%%\n",
+                f, e, nrow(s), co[2,1], co[2,4],
+                100*(s$ratio[which.max(s$Yr)]/s$ratio[which.min(s$Yr)] - 1)))
+  }
+}
+
+cat("\n=== Nivel del ratio: ¿difieren los viajes con y sin buceo? ===\n")
+print(as.data.frame(
+  tb %>% mutate(grp = ifelse(buceo, "con boquinete", "sin boquinete")) %>%
+    group_by(fleet, grp) %>%
+    summarise(n_viajes = n(), pct_con_morio = 100*mean(morio),
+              ratio = sum(ton_morio)/sum(ton_bonaci), .groups = "drop")),
+  digits = 3)
+
+cat("\nLECTURA:\n",
+    " - si la tendencia SIN boquinete es igual a la de todos -> el arte no contamina\n",
+    " - si difieren y además la contaminación tiene tendencia -> parte del efecto\n",
+    "   agregado era mezcla de artes, no abundancia\n",
+    " - si el NIVEL del ratio difiere mucho entre estratos -> son selectividades\n",
+    "   distintas y no deben mezclarse en ningún caso\n")
+
+dec <- tb %>% filter(!buceo) %>%
+  group_by(fleet, Yr) %>%
+  summarise(n = n(),
+            morio_x_viaje  = sum(ton_morio)/n(),
+            bonaci_x_viaje = sum(ton_bonaci)/n(), .groups = "drop")
+
+# revisa ceros ANTES: log(0) = -Inf
+print(dec %>% summarise(ceros_morio  = sum(morio_x_viaje  <= 0),
+                        ceros_bonaci = sum(bonaci_x_viaje <= 0)))
+
+for (f in unique(dec$fleet)) for (v in c("morio_x_viaje","bonaci_x_viaje")) {
+  s  <- dec[dec$fleet == f & dec[[v]] > 0, ]
+  m  <- lm(log(s[[v]]) ~ s$Yr, weights = s$n)      # <- log + ponderado por n
+  co <- summary(m)$coefficients
+  b  <- co[2,1]; span <- diff(range(s$Yr))
+  cat(sprintf("%-11s %-16s  %+6.2f%%/año  p=%-9.3g  total %+7.1f%%  (n_años=%d)\n",
+              f, v, 100*(exp(b)-1), co[2,4], 100*(exp(b*span)-1), nrow(s)))
+}
+
+#-------------------------------------------
+# the rubia-canane test for artisanal fleet
+
+PARGO <- c("Lutjanus synagris","Ocyurus chrysurus")
+tg <- yuc %>% filter(fleet == "artisanal") %>%
+  group_by(trip) %>%
+  summarise(Yr = first(ANO.CORTE),
+            t_mero  = sum(ton[species %in% c(MORIO, MB)], na.rm = TRUE),
+            t_pargo = sum(ton[species %in% PARGO],        na.rm = TRUE),
+            t_tot   = sum(ton, na.rm = TRUE), .groups = "drop") %>%
+  filter(!Yr %in% 2002, t_tot > 0)
+
+# 1. ¿aumenta la orientación a pargo?
+a <- tg %>% group_by(Yr) %>%
+  summarise(n = n(),
+            pct_viajes_pargo_domina = 100*mean(t_pargo > t_mero),
+            share_pargo = 100*sum(t_pargo)/sum(t_tot),
+            share_mero  = 100*sum(t_mero)/sum(t_tot), .groups = "drop")
+print(as.data.frame(a), digits = 3)
+for (v in c("pct_viajes_pargo_domina","share_pargo","share_mero")) {
+  m <- lm(a[[v]] ~ a$Yr, weights = a$n)
+  cat(sprintf("%-25s %+7.3f pp/año  p=%.3g\n", v, coef(m)[2], summary(m)$coefficients[2,4]))
+}
+
+# 2. el test SOLO en viajes dirigidos a mero (mero domina el desembarque)
+dom <- tg$trip[tg$t_mero > tg$t_pargo]
+d2 <- tb %>% filter(!buceo, fleet == "artisanal", trip %in% dom) %>%
+  group_by(Yr) %>% summarise(n = n(), y = sum(ton_morio)/n(), .groups = "drop")
+m <- lm(log(y) ~ Yr, data = d2, weights = n)
+cat(sprintf("\nmorio/viaje SOLO en viajes dirigidos a mero: %+6.2f%%/año  p=%.3g  (n_años=%d)\n",
+            100*(exp(coef(m)[2])-1), summary(m)$coefficients[2,4], nrow(d2)))
+
+u <- yuc %>% filter(fleet == "artisanal") %>%
+  group_by(trip) %>%
+  summarise(Yr = first(ANO.CORTE),
+            nves = max(NUMERO.EMBARCACIONES, na.rm = TRUE),
+            t_tot = sum(ton, na.rm = TRUE), .groups = "drop") %>%
+  filter(!Yr %in% 2002)
+
+# ¿cambió la unidad del aviso?
+a <- u %>% group_by(Yr) %>% summarise(n = n(), emb_medias = mean(nves),
+                                      ton_x_viaje = mean(t_tot), .groups = "drop")
+print(as.data.frame(a), digits = 3)
+for (v in c("emb_medias","ton_x_viaje")) {
+  m <- lm(log(a[[v]]) ~ a$Yr, weights = a$n)
+  cat(sprintf("%-12s %+6.2f%%/año  p=%.3g\n", v, 100*(exp(coef(m)[2])-1),
+              summary(m)$coefficients[2,4]))
+}
+
+# desembarque TOTAL anual de mero: ¿reproduce la serie conocida?
+tot <- yuc %>% filter(species == MORIO, !ANO.CORTE %in% 2002) %>%
+  group_by(ANO.CORTE) %>% summarise(ton = sum(ton, na.rm = TRUE), .groups = "drop")
+print(as.data.frame(tot))
+
+# declive de mero RELATIVO al desembarque total del mismo viaje
+rel <- yuc %>% filter(fleet=="artisanal", !ANO.CORTE %in% 2002) %>%
+  group_by(trip) %>%
+  summarise(Yr=first(ANO.CORTE),
+            t_mor=sum(ton[species==MORIO],na.rm=TRUE),
+            t_tot=sum(ton,na.rm=TRUE), .groups="drop") %>%
+  filter(t_tot>0) %>% group_by(Yr) %>%
+  summarise(n=n(), share=sum(t_mor)/sum(t_tot), .groups="drop")
+m <- lm(log(share) ~ Yr, data=rel, weights=n)
+cat(sprintf("share de mero: %+5.2f%%/año  p=%.3g\n",
+            100*(exp(coef(m)[2])-1), summary(m)$coefficients[2,4]))
+
+#-------------------------------------------------------
+# la prueba del pepino
+
+# 1. ¿está el pepino en la base? (identifica a los entrantes directamente)
+print(grep("pepino|Isostichopus|Holothuria|stichopus", 
+           unique(yuc$species), ignore.case = TRUE, value = TRUE))
+print(grep("PEPINO", unique(yuc$NOMBRE.PRINCIPAL), ignore.case = TRUE, value = TRUE))
+
+# 2. flota NÚCLEO: embarcaciones activas antes de 2009 Y después de 2018
+early <- unique(yuc$RNP.ACTIVO[yuc$fleet=="artisanal" & yuc$ANO.CORTE <= 2008])
+late  <- unique(yuc$RNP.ACTIVO[yuc$fleet=="artisanal" & yuc$ANO.CORTE >= 2019])
+core  <- intersect(early, late)
+cat("embarcaciones núcleo:", length(core), "\n")
+
+sh <- yuc %>% filter(fleet=="artisanal", !ANO.CORTE %in% 2002) %>%
+  group_by(trip) %>%
+  summarise(Yr=first(ANO.CORTE), ves=first(RNP.ACTIVO),
+            t_mor=sum(ton[species==MORIO],na.rm=TRUE),
+            t_tot=sum(ton,na.rm=TRUE), .groups="drop") %>%
+  filter(t_tot>0, !is.na(ves)) %>%
+  mutate(grp = ifelse(ves %in% core, "core", "rest"))
+
+print(table(sh$grp))                      # <- ¿hay filas en ambos?
+
+for (g in c("core","rest")) {
+  s <- sh %>% filter(grp==g) %>% group_by(Yr) %>%
+    summarise(n=n(), share=sum(t_mor)/sum(t_tot), .groups="drop") %>%
+    filter(is.finite(share), share>0)
+  if (nrow(s) < 8) { cat(g, ": solo", nrow(s), "anios utiles - se omite\n"); next }
+  m <- lm(log(share) ~ Yr, data=s, weights=n)
+  cat(sprintf("%-5s share de mero: %+5.2f%%/anio  p=%-9.3g (n_anios=%d, n_viajes=%d)\n",
+              g, 100*(exp(coef(m)[2])-1), summary(m)$coefficients[2,4], nrow(s), sum(s$n)))
+}
+
+PEP <- c("Holothuria floridana","Isostichopus badionotus")
+
+id <- function(x) format(x, scientific=FALSE, trim=TRUE)   # 10 dígitos sin notación científica
+pep_ids <- unique(id(yuc$RNPA.UNIDAD.ECONOMICA[yuc$species %in% PEP]))
+cat("permisionarios con pepino:", length(pep_ids), "\n")
+
+sh <- yuc %>% filter(fleet=="artisanal", !ANO.CORTE %in% 2002) %>%
+  group_by(trip) %>%
+  summarise(Yr=first(ANO.CORTE), ue=id(first(RNPA.UNIDAD.ECONOMICA)),
+            t_mor=sum(ton[species==MORIO],na.rm=TRUE),
+            t_tot=sum(ton,na.rm=TRUE), .groups="drop") %>%
+  filter(t_tot>0, !is.na(ue)) %>%
+  mutate(grp = ifelse(ue %in% pep_ids, "pepinero", "no_pepinero"))
+
+print(table(sh$grp))                       # <- ambos grupos deben tener miles de viajes
+
+for (g in c("pepinero","no_pepinero")) {
+  s <- sh %>% filter(grp==g) %>% group_by(Yr) %>%
+    summarise(n=n(), share=sum(t_mor)/sum(t_tot), .groups="drop") %>%
+    filter(is.finite(share), share>0)
+  if (nrow(s) < 8) { cat(g, ": solo", nrow(s), "anios - se omite\n"); next }
+  m <- lm(log(share) ~ Yr, data=s, weights=n)
+  cat(sprintf("%-12s share de mero: %+5.2f%%/anio  p=%-9.3g (n_anios=%d, n_viajes=%d)\n",
+              g, 100*(exp(coef(m)[2])-1), summary(m)$coefficients[2,4], nrow(s), sum(s$n)))
+}
+
+#------------------------------------------------------------
+# la hipotesis del pulpo
+
+PULPO <- c("Octopus maya","Octopus americanus","Octopus vulgaris")
+id <- function(x) format(x, scientific=FALSE, trim=TRUE)
+
+tr <- yuc %>% filter(!ANO.CORTE %in% 2002) %>%
+  group_by(trip) %>%
+  summarise(fleet=first(fleet), Yr=first(ANO.CORTE), mes=first(mes),
+            ue=id(first(RNPA.UNIDAD.ECONOMICA)),
+            t_mor=sum(ton[species==MORIO],na.rm=TRUE),
+            t_pul=sum(ton[species %in% PULPO],na.rm=TRUE),
+            t_tot=sum(ton,na.rm=TRUE), .groups="drop") %>%
+  filter(t_tot>0)
+
+# A. ¿aumentó la orientación a pulpo?
+a <- tr %>% group_by(fleet,Yr) %>%
+  summarise(n=n(), pct_viajes_pulpo=100*mean(t_pul>0),
+            share_pulpo=100*sum(t_pul)/sum(t_tot), .groups="drop")
+for (f in unique(a$fleet)) for (v in c("pct_viajes_pulpo","share_pulpo")) {
+  s <- a[a$fleet==f,]; m <- lm(s[[v]] ~ s$Yr, weights=s$n)
+  cat(sprintf("%-11s %-18s %+7.3f pp/anio  p=%.3g\n", f, v,
+              coef(m)[2], summary(m)$coefficients[2,4]))
+}
+
+# B. share de mero SOLO en viajes SIN pulpo  <- la prueba
+cat("\n")
+for (f in unique(tr$fleet)) {
+  s <- tr %>% filter(fleet==f, t_pul==0) %>% group_by(Yr) %>%
+    summarise(n=n(), share=sum(t_mor)/sum(t_tot), .groups="drop") %>%
+    filter(is.finite(share), share>0)
+  m <- lm(log(share) ~ Yr, data=s, weights=n)
+  cat(sprintf("%-11s share mero (viajes SIN pulpo): %+5.2f%%/anio p=%-9.3g n=%d\n",
+              f, 100*(exp(coef(m)[2])-1), summary(m)$coefficients[2,4], sum(s$n)))
+}
+
+# C. control estacional: solo meses sin temporada de pulpo
+cat("\n")
+for (f in unique(tr$fleet)) {
+  s <- tr %>% filter(fleet==f, !mes %in% 8:12) %>% group_by(Yr) %>%
+    summarise(n=n(), share=sum(t_mor)/sum(t_tot), .groups="drop") %>%
+    filter(is.finite(share), share>0)
+  m <- lm(log(share) ~ Yr, data=s, weights=n)
+  cat(sprintf("%-11s share mero (ene-jul, fuera de pulpo): %+5.2f%%/anio p=%-9.3g n=%d\n",
+              f, 100*(exp(coef(m)[2])-1), summary(m)$coefficients[2,4], sum(s$n)))
+}
+
+#---------------------------------------
+# la hipotesis de F1>F2
+
+for (L in 0:8) {
+  x <- diff(w$mero_artisanal[1:(nrow(w)-L)])
+  y <- diff(w$share_mid.range[(1+L):nrow(w)])
+  ct <- cor.test(x, y)
+  cat(sprintf("rezago %d (1as diferencias): r = %+.3f  p = %.3g\n", L, ct$estimate, ct$p.value))
+}
+
+sh <- yuc %>% filter(!ANO.CORTE %in% 2002) %>%
+  group_by(trip) %>%
+  summarise(fleet=first(fleet), Yr=first(ANO.CORTE),
+            t_mor=sum(ton[species==MORIO],na.rm=TRUE),
+            t_pul=sum(ton[species %in% PULPO],na.rm=TRUE),
+            t_tot=sum(ton,na.rm=TRUE), .groups="drop") %>%
+  filter(t_tot>0, t_pul==0) %>%
+  group_by(fleet,Yr) %>%
+  summarise(share=sum(t_mor)/sum(t_tot), mero=sum(t_mor), .groups="drop")
+
+w <- tidyr::pivot_wider(sh, names_from=fleet, values_from=c(share,mero))
+for (L in 0:8) {
+  x <- w$mero_artisanal[1:(nrow(w)-L)]      # captura F1 en t
+  y <- w$share_mid.range[(1+L):nrow(w)]     # share F2 en t+L
+  cat(sprintf("rezago %d años: r = %+.3f  p = %.3g\n", L,
+              cor(x,y,use="complete.obs"),
+              cor.test(x,y)$p.value))
+}
+
+#-----------------------------------------------
+# catch share to compare to red grouper management plan
+
+tr <- yuc %>% group_by(trip) %>%
+  summarise(fleet=first(fleet), Yr=first(ANO.CORTE),
+            mero = any(species == MORIO), t_tot=sum(ton,na.rm=TRUE),
+            t_mor=sum(ton[species==MORIO],na.rm=TRUE), .groups="drop") %>%
+  filter(mero, t_tot>0, Yr <= 2010)          # periodo del plan
+print(tr %>% group_by(fleet) %>%
+        summarise(n=n(), pct_mero = 100*sum(t_mor)/sum(t_tot)))
+# esperado:  artisanal ~39.3%   mid.range ~72.7%
