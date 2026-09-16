@@ -1,0 +1,111 @@
+# ------------------------------------------------------------
+# FIGURA 6a_b — selectividad: empírica, estimada libremente, especificada
+# ------------------------------------------------------------
+# La figura documenta por qué la selectividad se especificó en lugar de
+# estimarse. Tres capas:
+#
+#   (i)   curvas empíricas de probabilidad de captura por tamaño de anzuelo
+#         (Brulé et al. 2011; Christiansen et al. 2020), medición directa;
+#   (ii)  selectividad estimada libremente, que para las flotas de mediana
+#         altura alcanza picos 30-35 cm por encima del anzuelo más grande
+#         documentado y por encima de la talla media observada en el piloto;
+#   (iii) selectividad especificada desde las curvas empíricas, adoptada en
+#         la configuración base.
+#
+# La flota artesanal es la excepción y sirve de validación interna: su pico
+# estimado libremente (32.5 cm) coincide con la curva de su anzuelo
+# principal (#12/0, 33.0 cm), y su selectividad en la talla de madurez
+# (0.086) concuerda con el 95 por ciento de inmaduros observado en el
+# muestreo piloto.
+# ============================================================
+
+library(r4ss); library(ggplot2); library(dplyr); library(tidyr)
+
+ROOT  <- dirname(base_dir)
+FREE  <- file.path(ROOT, "piloto_tuned")            # selectividad estimada
+SPEC  <- file.path(ROOT, "jit_frac99", "r03")      # configuración base
+L50MAT <- 50.9
+
+FLEET_LAB <- c("1" = "Artisanal (F1)", "2" = "Mexican mid-range (F2)",
+               "3" = "Cuban mid-range (F3)")
+
+# --- curvas empíricas por anzuelo (ajustes doble-normal) ---
+HOOKS <- data.frame(
+  hook = c("#12/0", "#14/0", "#15/0"),
+  peak = c(33.0, 44.2, 47.3),
+  sd   = sqrt(exp(c(4.852, 5.299, 5.299)) / 2))
+L <- seq(10, 100, 0.5)
+emp <- bind_rows(lapply(seq_len(nrow(HOOKS)), function(k)
+  data.frame(L = L, hook = HOOKS$hook[k],
+             s = exp(-(L - HOOKS$peak[k])^2 / (2 * HOOKS$sd[k]^2)))))
+
+# --- selectividad del modelo ---
+get_sel <- function(dir, lab) {
+  o <- SS_output(dir, verbose = FALSE, printstats = FALSE, covar = FALSE)
+  s <- o$sizeselex %>% filter(Factor == "Lsel", Sex == 1, Yr == o$endyr)
+  b <- grep("^[0-9]+\\.?[0-9]*$", names(s), value = TRUE)
+  s %>% select(Fleet, all_of(b)) %>%
+    pivot_longer(-Fleet, names_to = "L", values_to = "s") %>%
+    mutate(L = as.numeric(L), version = lab,
+           fleet_lab = FLEET_LAB[as.character(Fleet)]) %>%
+    filter(!is.na(fleet_lab))
+}
+mod <- bind_rows(get_sel(FREE, "Freely estimated"),
+                 get_sel(SPEC, "Specified from hook curves"))
+
+cat("=== picos por versión y flota ===\n")
+print(as.data.frame(mod %>% group_by(version, fleet_lab) %>%
+                      summarise(peak = L[which.max(s)],
+                                sel_at_L50mat = s[which.min(abs(L - L50MAT))], .groups = "drop")),
+      digits = 3)
+
+p6A <- ggplot() +
+  geom_line(data = emp, aes(L, s, colour = hook), linewidth = .8, alpha = .8) +
+  geom_line(data = mod, aes(L, s, linetype = version), colour = "grey15", linewidth = 1) +
+  geom_vline(xintercept = L50MAT, linetype = "dashed", colour = "grey40") +
+  annotate("text", x = L50MAT + 1, y = 1.04, label = "L50 maturity",
+           hjust = 0, size = 3, colour = "grey35") +
+  annotate("segment", x = 47.3, xend = 47.3, y = 0, yend = -0.04,
+           colour = "grey30", linewidth = .6) +
+  annotate("text", x = 47.3, y = -0.09, label = "largest documented hook",
+           size = 2.7, colour = "grey30") +
+  facet_wrap(~fleet_lab, nrow = 1) +
+  scale_colour_brewer(palette = "Dark2", name = "Hook size\n(empirical)") +
+  scale_linetype_manual(values = c("Freely estimated" = "dotted",
+                                   "Specified from hook curves" = "solid"),
+                        name = "Fleet selectivity") +
+  coord_cartesian(xlim = c(10, 95), ylim = c(-0.12, 1.08), expand = FALSE) +
+  labs(x = "Fork length (cm)", y = "Relative selectivity") +
+  theme_bw(base_size = 12) +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom",
+        legend.box = "vertical",
+        strip.background = element_rect(fill = "grey95"),
+        strip.text = element_text(face = "bold"))+
+  ggtitle("a)")
+
+ggsave("Fig5a_selectivity.png", p, width = 11, height = 5.5, dpi = 300)
+cat("\nguardado: Fig5a_selectivity.png\n")
+
+p6A/p6b
+ggsave("Fig6a_b.png", p6A/p6b, width = 12, height = 10, dpi = 300)
+
+# ------------------------------------------------------------
+#
+# Figure 6. Fleet selectivity compared with empirical capture-probability
+# curves by hook size (coloured lines; Brulé et al. 2011; Christiansen et
+# al. 2020), shown for the three hook fleets. Dotted lines give selectivity
+# estimated freely from length compositions; solid lines give selectivity
+# specified from the empirical curves for the hooks each fleet is documented
+# to use, as adopted in the base configuration. The artisanal fleet provides
+# internal validation: estimated and specified curves coincide, its peak
+# matches the empirical curve for hook #12/0, and its selectivity at length
+# at maturity (0.086) is consistent with the 95% immature fraction
+# observed in pilot sampling. For the mid-range fleets the freely estimated
+# curves peak 30 to 35 cm above the largest hook for which capture
+# probability has been measured (#15/0, 47.3 cm) and above the mean length
+# observed in pilot sampling (54.1 cm), and are asymptotic rather than
+# domed; specifying them from the empirical curves improved the fit to
+# length compositions by half and eliminated the parameter-bound problem
+# that had affected 24 of 26 jitter replicates. Dashed vertical line marks
+# length at 50 percent maturity (50.9 cm).
+# ------------------------------------------------------------
