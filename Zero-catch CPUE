@@ -1,0 +1,372 @@
+# -----------------------------------------------------------
+# Reconstrucción del índice de abundancia 2000-2023 CON CEROS
+# ------------------------------------------------------------
+# El índice actual se construyó a partir de registros positivos: un viaje
+# que no desembarcó mero simplemente no aparece. Eso lo hace ciego a la
+# tasa de encuentro, que cayó de 2.6% a 25.8% de viajes sin mero entre
+# 2000 y 2024, y produce hiperestabilidad por construcción.
+#
+# La definición de "viaje de la pesquería" determina cuántos ceros hay,
+# así que se calculan cuatro y se reporta la sensibilidad. Un viaje de
+# pulpo NO es un cero; uno que salió al mismo caladero con el mismo arte
+# y volvió sin mero, SÍ.
+#
+# Salida: índice delta-lognormal por flota, con y sin efecto de
+# embarcación (solo posible en F2: los avisos artesanales no traen
+# RNP.ACTIVO), listo para SS3.
+# ============================================================
+
+library(dplyr); library(ggplot2); library(lme4)
+
+MORIO <- "Epinephelus morio"
+PULPO <- c("Octopus maya", "Octopus americanus", "Octopus vulgaris")
+BUCEO <- c("Lachnolaimus maximus")          # proxy de arte de buceo
+DROP  <- c(2002)                            # Isidoro
+HOOKS <- c("mid.range" = 500, "artisanal" = 262)   # medianas de permisos
+
+id <- function(x) format(x, scientific = FALSE, trim = TRUE)
+
+# ============================================================
+# 1. Ensamblaje acompañante, derivado empíricamente
+# ============================================================
+yuc <- yuc %>% mutate(trip = paste(FOLIO.AVISO, ANO.CORTE, mes, dia,
+                                   id(RNPA.UNIDAD.ECONOMICA)))
+trips_mero <- unique(yuc$trip[yuc$species == MORIO])
+
+perfil <- yuc %>% filter(trip %in% trips_mero, species != MORIO) %>%
+  group_by(species) %>% summarise(n = n_distinct(trip), .groups = "drop") %>%
+  mutate(pct = 100 * n / length(trips_mero)) %>% arrange(desc(pct))
+cat("=== especies acompañantes (% de viajes con mero) ===\n")
+print(as.data.frame(head(perfil, 12)), digits = 3)
+
+UMBRAL   <- 10
+sp_assoc <- perfil$species[perfil$pct >= UMBRAL]
+sp_assoc <- setdiff(sp_assoc, "Lachnolaimus maximus")
+cat("\nensamblaje (>=", UMBRAL, "%):\n"); cat(paste(" -", sp_assoc), sep = "\n")
+
+# ============================================================
+# 2. Tabla a nivel de viaje
+# ============================================================
+tr <- yuc %>%
+  filter(!ANO.CORTE %in% DROP) %>%
+  group_by(trip) %>%
+  summarise(fleet = first(fleet), Yr = first(ANO.CORTE), mes = first(mes),
+            Site = first(Site), ue = id(first(RNPA.UNIDAD.ECONOMICA)),
+            ves = first(RNP.ACTIVO),
+            nves      = max(NUMERO.EMBARCACIONES, na.rm = TRUE),
+            ton_mor   = sum(ton[species == MORIO], na.rm = TRUE),
+            has_mero  = any(species == MORIO),
+            has_assoc = any(species %in% sp_assoc),
+            has_targ  = any(species.a %in% c("01-target", "02-associated")),
+            buceo     = any(species %in% BUCEO),
+            pulpo     = any(species %in% PULPO),
+            .groups = "drop") %>%
+  mutate(nves = ifelse(is.finite(nves) & nves > 0, nves, 1),
+         hooks = unname(HOOKS[as.character(fleet)]) * nves,
+         cpue  = ton_mor / hooks * 100)
+
+# embarcaciones que participan de verdad (>=20% de sus viajes con mero)
+ue_mero <- tr %>% group_by(ue) %>%
+  summarise(p = mean(has_mero), n = n(), .groups = "drop") %>%
+  filter(p >= 0.20, n >= 10) %>% pull(ue)
+
+defs <- list(
+  A_solo_positivos = tr %>% filter(has_mero),
+  B_ensamblaje     = tr %>% filter(has_mero | has_assoc),
+  C_clasificacion  = tr %>% filter(has_mero | has_targ),
+  D_permisionarios = tr %>% filter(ue %in% ue_mero))
+
+cat("\n=== sensibilidad a la definición de pesquería ===\n")
+for (nm in names(defs)) for (f in unique(tr$fleet)) {
+  x <- defs[[nm]] %>% filter(fleet == f)
+  cat(sprintf("  %-18s %-10s viajes %7d | %% ceros %5.1f\n",
+              nm, f, nrow(x), 100 * mean(!x$has_mero)))
+}
+
+# ============================================================
+# 3. Tasa de encuentro por año — la señal que el índice actual no ve
+# ============================================================
+enc <- defs[["B_ensamblaje"]] %>% group_by(fleet, Yr) %>%
+  summarise(n = n(), pct_cero = 100 * mean(!has_mero), .groups = "drop")
+cat("\n=== % de viajes de la pesquería SIN mero ===\n")
+print(as.data.frame(tidyr::pivot_wider(enc %>% select(fleet, Yr, pct_cero),
+                                       names_from = fleet, values_from = pct_cero)),
+      digits = 3)
+
+# ============================================================
+# 4. Índice delta-lognormal
+# ============================================================
+DEF <- "B_ensamblaje"          # <- definición principal; repetir con C y D
+
+library(lme4)
+
+idx_fleet <- function(f, use_vessel, min_trips = 20) {
+  d <- defs[[DEF]] %>% filter(fleet == f, !buceo) %>%
+    mutate(pos = as.integer(ton_mor > 0), Yrf = factor(Yr),
+           mesf = factor(mes), Sitef = factor(Site), uef = factor(ue))
+  if (use_vessel) {
+    keep <- names(which(table(d$uef) >= min_trips))
+    d <- d %>% filter(uef %in% keep) %>% mutate(uef = droplevels(uef))
+    if (nlevels(d$uef) < 5) return(NULL)
+  }
+  d  <- d %>% mutate(Yrf = droplevels(Yrf), mesf = droplevels(mesf),
+                     Sitef = droplevels(Sitef))
+  dp <- d %>% filter(pos == 1) %>% mutate(lc = log(cpue))
+  
+  if (use_vessel) {
+    gb <- glmer(pos ~ Yrf + mesf + Sitef + (1|uef), data = d, family = binomial,
+                control = glmerControl(optimizer = "bobyqa"))
+    gp <- lmer (lc  ~ Yrf + mesf + Sitef + (1|uef), data = dp, REML = FALSE)
+  } else {
+    gb <- glm(pos ~ Yrf + mesf + Sitef, data = d,  family = binomial)
+    gp <- lm (lc  ~ Yrf + mesf + Sitef, data = dp)
+  }
+  md <- function(src, v) factor(names(sort(table(src[[v]]), decreasing = TRUE))[1],
+                                levels = levels(d[[v]]))
+  nd <- data.frame(Yrf = levels(d$Yrf))
+  nd$mesf <- md(d, "mesf"); nd$Sitef <- md(d, "Sitef")
+  
+  pb <- predict(gb, nd, type = "response", re.form = NA)   # efecto aleatorio = 0
+  pp <- exp(predict(gp, nd, re.form = NA))
+  data.frame(Yr = as.numeric(levels(d$Yrf)), index = (pb*pp)/mean(pb*pp),
+             fleet = f, vessel = use_vessel)
+}
+
+res <- bind_rows(lapply(unique(tr$fleet), function(f)
+  bind_rows(idx_fleet(f, FALSE), tryCatch(idx_fleet(f, TRUE), error = function(e) NULL))))
+
+nom <- defs[[DEF]] %>% filter(!buceo) %>% group_by(fleet, Yr) %>%
+  summarise(index = mean(cpue), .groups = "drop") %>%
+  group_by(fleet) %>% mutate(index = index / mean(index), vessel = NA) %>% ungroup()
+
+cat("\n=== tendencia de cada índice (log-lineal) ===\n")
+for (f in unique(res$fleet)) {
+  for (v in unique(res$vessel[res$fleet == f])) {
+    s <- res %>% filter(fleet == f, vessel == v)
+    m <- lm(log(index) ~ Yr, data = s)
+    cat(sprintf("  %-10s embarcación=%-5s %+6.2f%%/año  p = %.3g\n",
+                f, v, 100*(exp(coef(m)[2]) - 1), summary(m)$coefficients[2,4]))
+  }
+  s <- nom %>% filter(fleet == f); m <- lm(log(index) ~ Yr, data = s)
+  cat(sprintf("  %-10s NOMINAL con ceros    %+6.2f%%/año  p = %.3g\n",
+              f, 100*(exp(coef(m)[2]) - 1), summary(m)$coefficients[2,4]))
+  # comparación: solo positivos, como el índice actual
+  sp <- defs[["A_solo_positivos"]] %>% filter(fleet == f, !buceo) %>%
+    group_by(Yr) %>% summarise(i = mean(cpue), .groups = "drop")
+  m2 <- lm(log(i) ~ Yr, data = sp)
+  cat(sprintf("  %-10s SOLO POSITIVOS       %+6.2f%%/año  p = %.3g   <- índice actual\n\n",
+              f, 100*(exp(coef(m2)[2]) - 1), summary(m2)$coefficients[2,4]))
+}
+
+p <- ggplot(res, aes(Yr, index, colour = ifelse(vessel, "with vessel", "no vessel"))) +
+  geom_line(linewidth = .9) + geom_point(size = 1.2) +
+  geom_line(data = nom, aes(colour = "nominal, zeros included"), linewidth = .8, linetype = "dashed") +
+  facet_wrap(~fleet, scales = "free_y") +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  labs(x = "Year", y = "Relative index", colour = NULL) +
+  theme_bw(base_size = 12) + theme(legend.position = "bottom")
+ggsave("index_2000_2023_with_zeros.png", p, width = 10, height = 5, dpi = 300)
+
+write.csv(res, "index_2000_2023_reconstructed.csv", row.names = FALSE)
+cat("guardado: index_2000_2023_reconstructed.csv\n")
+
+#-------------------------------------------------------
+# 1. quitar boquinete del ensamblaje (arte de buceo, no palangre)
+sp_assoc <- setdiff(sp_assoc, "Lachnolaimus maximus")
+cat("ensamblaje corregido:\n"); cat(paste(" -", sp_assoc), sep = "\n")
+
+# 2. recalcular las definiciones con el ensamblaje corregido
+tr <- tr %>% mutate(has_assoc = trip %in%
+                      (yuc %>% filter(species %in% sp_assoc) %>% pull(trip) %>% unique()))
+
+defs <- list(
+  A_solo_positivos = tr %>% filter(has_mero),
+  B_ensamblaje     = tr %>% filter(has_mero | has_assoc),
+  C_clasificacion  = tr %>% filter(has_mero | has_targ),
+  D_permisionarios = tr %>% filter(ue %in% ue_mero))
+
+for (nm in names(defs)) for (f in unique(tr$fleet)) {
+  x <- defs[[nm]] %>% filter(fleet == f)
+  cat(sprintf("  %-18s %-10s viajes %7d | %% ceros %5.1f\n",
+              nm, f, nrow(x), 100*mean(!x$has_mero)))
+}
+
+# 3. correr las tres definiciones y comparar pendientes
+for (DEF in c("B_ensamblaje", "C_clasificacion", "D_permisionarios")) {
+  cat("\n########", DEF, "########\n")
+  for (f in unique(tr$fleet)) {
+    for (uv in c(FALSE, TRUE)) {
+      s <- tryCatch(idx_fleet(f, uv), error = function(e) NULL)
+      if (is.null(s)) next
+      m <- lm(log(index) ~ Yr, data = s)
+      cat(sprintf("  %-10s embarcacion=%-5s %+6.2f%%/ano  p = %.3g\n",
+                  f, uv, 100*(exp(coef(m)[2])-1), summary(m)$coefficients[2,4]))
+    }
+  }
+}
+
+d  <- defs[["B_ensamblaje"]] %>% filter(fleet=="mid.range", !buceo)
+dp <- d %>% filter(ton_mor > 0)
+print(table(droplevels(factor(dp$Site))))        # ¿sitios con muy pocos viajes?
+print(table(droplevels(factor(dp$Site)), dp$Yr)[,1:6])   # ¿sitios en un solo año?
+
+raro <- names(which(table(d$Site) < 200))
+d <- d %>% mutate(Sitef = factor(ifelse(Site %in% raro, "other", Site)))
+
+# 1. resolver la confusión sitio-año: 2001 solo tiene "Not specified"
+d <- d %>%
+  mutate(Sitef = ifelse(Site %in% c("El Cuyo","Rio Lagartos","San Felipe","Not specified"),
+                        "other", Site),
+         Sitef = factor(Sitef))
+print(table(d$Sitef, d$Yr)[, 1:5])     # verificar que 2001 ya no es exclusivo
+
+# 2. en F2, usar embarcación real
+d <- d %>% mutate(uef = factor(ves))
+cat("embarcaciones F2:", nlevels(d$uef), "| NA:", sum(is.na(d$ves)), "\n")
+
+d %>% summarise(n_emb = n_distinct(ves), na = sum(is.na(ves)),
+                viajes_por_emb = n()/n_distinct(ves))
+
+d <- d %>% filter(Yr != 2001) %>%
+  mutate(Yrf = droplevels(factor(Yr)), Sitef = droplevels(Sitef),
+         uef = factor(ves))
+print(table(d$Sitef, d$Yrf)[, 1:4])          # verificar que cada año tiene >1 sitio
+
+idx_fleet <- function(f, use_vessel, min_trips = 20) {
+  d <- defs[[DEF]] %>% filter(fleet == f, !buceo, Yr != 2001) %>%
+    mutate(pos   = as.integer(ton_mor > 0),
+           Sitef = factor(ifelse(Site %in% c("El Cuyo","Rio Lagartos",
+                                             "San Felipe","Not specified"),
+                                 "other", Site)),
+           uef   = factor(if (f == "mid.range") ves else ue),
+           Yrf   = factor(Yr), mesf = factor(mes))
+  if (use_vessel) {
+    keep <- names(which(table(d$uef) >= min_trips))
+    d <- d %>% filter(uef %in% keep)
+  }
+  d  <- d %>% mutate(across(c(Yrf, mesf, Sitef, uef), droplevels))
+  dp <- d %>% filter(pos == 1) %>% mutate(lc = log(cpue))
+  
+  if (use_vessel) {
+    gb <- lme4::glmer(pos ~ Yrf + mesf + Sitef + (1|uef), data = d, family = binomial,
+                      control = lme4::glmerControl(optimizer = "bobyqa",
+                                                   optCtrl = list(maxfun = 2e5)))
+    gp <- lme4::lmer(lc ~ Yrf + mesf + Sitef + (1|uef), data = dp, REML = FALSE)
+    co <- summary(gp)$coefficients
+  } else {
+    gb <- glm(pos ~ Yrf + mesf + Sitef, data = d,  family = binomial)
+    gp <- lm (lc  ~ Yrf + mesf + Sitef, data = dp)
+    co <- summary(gp)$coefficients
+  }
+  md <- function(v) factor(names(sort(table(d[[v]]), decreasing = TRUE))[1],
+                           levels = levels(d[[v]]))
+  nd <- data.frame(Yrf = levels(d$Yrf), mesf = md("mesf"), Sitef = md("Sitef"))
+  pb <- predict(gb, nd, type = "response", re.form = NA)
+  pp <- exp(predict(gp, nd, re.form = NA))
+  ix <- pb * pp
+  
+  se <- co[grep("^Yrf", rownames(co)), 2]        # SE de los efectos de año
+  data.frame(Yr = as.numeric(levels(d$Yrf)),
+             index  = ix / mean(ix),
+             se_log = pmax(0.05, c(mean(se), se)),   # año base: SE promedio
+             fleet = f, vessel = use_vessel)
+}
+
+DEF <- "B_ensamblaje"
+idxF2 <- idx_fleet("mid.range", TRUE)
+idxF1 <- idx_fleet("artisanal", TRUE)
+print(idxF2, digits = 3)
+write.csv(rbind(idxF2, idxF1), "index_SS3_2000_2023.csv", row.names = FALSE)
+
+# (a) conservar la SD del año 2001 de tu índice actual, para comparabilidad
+idxF2$se_log <- 0.0401
+
+# (b) mejor: estimar la variabilidad real desde el ajuste
+d <- defs[["B_ensamblaje"]] %>% filter(fleet=="mid.range", !buceo, Yr!=2001)
+m <- lm(log(cpue) ~ factor(Yr) + factor(mes) + factor(Site),
+        data = d %>% filter(ton_mor>0))
+cat("RSE del ajuste:", round(summary(m)$sigma, 3), "\n")
+
+idxF2$se_log <- 0.25
+idxF1$se_log <- 0.30      # F1 solo se estandariza a nivel de permisionario
+
+defs[["B_ensamblaje"]] %>% filter(fleet=="artisanal", !buceo) %>%
+  group_by(Yr) %>%
+  summarise(viajes=n(), pct_cero=100*mean(!has_mero),
+            cpue_pos=mean(cpue[ton_mor>0]), emb=n_distinct(ue)) %>%
+  print(n=25)
+
+defs[["B_ensamblaje"]] %>% filter(fleet=="artisanal") %>%
+  group_by(Yr) %>%
+  summarise(viajes = n(),
+            nves_0    = sum(nves <= 0 | !is.finite(nves)),
+            nves_med  = median(nves[nves > 0 & is.finite(nves)]),
+            nves_max  = max(nves[is.finite(nves)])) %>% print(n=25)
+
+# nves implausible: mayor que las embarcaciones que ampara el permiso
+tr <- tr %>% mutate(nves = ifelse(nves > 50 | !is.finite(nves) | nves <= 0, NA, nves))
+
+#-------------------------------------
+# F1 sera unicamente desde 2008 para evitar pesimos registros de embarcaciones
+
+# 1. filtro de plausibilidad en nves (captura mal capturada -> NA)
+tr <- tr %>%
+  mutate(nves  = ifelse(!is.finite(nves) | nves <= 0 | nves > 50, NA, nves),
+         hooks = unname(HOOKS[as.character(fleet)]) * nves,
+         cpue  = ton_mor / hooks * 100)
+cat("viajes descartados por nves implausible:", sum(is.na(tr$nves)), "\n")
+
+# 2. reconstruir defs con el tr filtrado
+defs <- list(
+  A_solo_positivos = tr %>% filter(has_mero),
+  B_ensamblaje     = tr %>% filter(has_mero | has_assoc),
+  C_clasificacion  = tr %>% filter(has_mero | has_targ),
+  D_permisionarios = tr %>% filter(ue %in% ue_mero))
+
+# 3. año inicial por flota dentro de idx_fleet
+YR0 <- c(artisanal = 2008, mid.range = 2000)
+
+idx_fleet <- function(f, use_vessel, min_trips = 20) {
+  d <- defs[[DEF]] %>%
+    filter(fleet == f, !buceo, !is.na(nves), Yr != 2001, Yr >= YR0[[f]]) %>%
+    mutate(pos   = as.integer(ton_mor > 0),
+           Sitef = factor(ifelse(Site %in% c("El Cuyo","Rio Lagartos",
+                                             "San Felipe","Not specified"),
+                                 "other", Site)),
+           uef   = factor(if (f == "mid.range") ves else ue),
+           Yrf = factor(Yr), mesf = factor(mes))
+  d  <- d %>% mutate(across(c(Yrf, mesf, Sitef, uef), droplevels))
+  dp <- d %>% filter(pos == 1) %>% mutate(lc = log(cpue))
+  
+  if (use_vessel) {
+    gb <- lme4::glmer(pos ~ Yrf + mesf + Sitef + (1|uef), data = d, family = binomial,
+                      control = lme4::glmerControl(optimizer = "bobyqa",
+                                                   optCtrl = list(maxfun = 2e5)))
+    gp <- lme4::lmer(lc ~ Yrf + mesf + Sitef + (1|uef), data = dp, REML = FALSE)
+    co <- summary(gp)$coefficients
+  } else {
+    gb <- glm(pos ~ Yrf + mesf + Sitef, data = d,  family = binomial)
+    gp <- lm (lc  ~ Yrf + mesf + Sitef, data = dp)
+    co <- summary(gp)$coefficients
+  }
+  md <- function(v) factor(names(sort(table(d[[v]]), decreasing = TRUE))[1],
+                           levels = levels(d[[v]]))
+  nd <- data.frame(Yrf = levels(d$Yrf), mesf = md("mesf"), Sitef = md("Sitef"))
+  pb <- predict(gb, nd, type = "response", re.form = NA)
+  pp <- exp(predict(gp, nd, re.form = NA))
+  ix <- pb * pp
+  
+  se <- co[grep("^Yrf", rownames(co)), 2]        # SE de los efectos de año
+  data.frame(Yr = as.numeric(levels(d$Yrf)),
+             index  = ix / mean(ix),
+             se_log = pmax(0.05, c(mean(se), se)),   # año base: SE promedio
+             fleet = f, vessel = use_vessel)
+}
+
+DEF <- "B_ensamblaje"
+idxF2 <- idx_fleet("mid.range", TRUE)
+idxF1 <- idx_fleet("artisanal", TRUE)
+idxF1$se_log <- 0.30; idxF2$se_log <- 0.25
+print(idxF1, digits = 3)
+
+write.csv(rbind(idxF2, idxF1), "index_SS3_2000_2023.csv", row.names = FALSE)
