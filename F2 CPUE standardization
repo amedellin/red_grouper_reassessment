@@ -1,0 +1,91 @@
+# ------------------------------------------------------------
+# F2 CPUE standardization — delta-lognormal with vessel effect
+# Input: defs[["B_ensamblaje"]] (primary) and defs[["D_embarcaciones"]]
+# from definir_pesqueria_ceros.R — trip-level records WITH zeros.
+# ------------------------------------------------------------
+# How much of the observed decline is abundance, and how much is
+# fleet composition? As effort fell ~65%, less efficient vessels exited, so
+# mean fleet catchability rose. If that is happening, controlling for vessel
+# should make the decline STEEPER than the nominal series, not flatter.
+# -------------------------------------------------------------
+
+library(dplyr); library(ggplot2)
+
+HOOKS_V  <- 1500      # imputed hooks per mid-range vessel
+DROP_YRS <- c(2002)   # Isidoro: near-zero effort, unreliable
+
+prep <- function(x) {
+  x %>%
+    filter(!Yr %in% DROP_YRS) %>%
+    mutate(cpue   = ton_mero / (pmax(nves, 1) * HOOKS_V) * 100,
+           pos    = as.integer(ton_mero > 0),
+           Yrf    = factor(Yr),
+           mesf   = factor(mes),
+           vessel = factor(vessel),
+           Sitef  = factor(Site)) %>%
+    filter(is.finite(cpue))
+}
+
+standardise <- function(x, lab) {
+  d <- prep(x)
+  nv <- nlevels(d$vessel)
+  cat(sprintf("\n########## %s ##########\nviajes %d | embarcaciones %d | %% ceros %.1f\n",
+              lab, nrow(d), nv, 100 * mean(d$pos == 0)))
+  if (nv > 3000) cat("  ! muchas embarcaciones: considera efecto aleatorio (lme4)\n")
+  
+  dp <- d %>% filter(pos == 1) %>% mutate(lc = log(cpue))
+  
+  # --- models: with and without vessel ---
+  b_nov <- glm(pos ~ Yrf + mesf + Sitef,          data = d,  family = binomial)
+  b_ves <- glm(pos ~ Yrf + mesf + Sitef + vessel, data = d,  family = binomial)
+  p_nov <- lm (lc  ~ Yrf + mesf + Sitef,          data = dp)
+  p_ves <- lm (lc  ~ Yrf + mesf + Sitef + vessel, data = dp)
+  
+  newd <- function(mod, dd) {
+    nd <- data.frame(Yrf = levels(d$Yrf))
+    md <- function(v, src) factor(names(sort(table(src[[v]]), decreasing = TRUE))[1],
+                                  levels = levels(d[[v]]))
+    nd$mesf  <- md("mesf", dd); nd$Sitef <- md("Sitef", dd)
+    if ("vessel" %in% all.vars(formula(mod))) nd$vessel <- md("vessel", dd)
+    nd
+  }
+  idx_nov <- predict(b_nov, newd(b_nov, d), type = "response") *
+    exp(predict(p_nov, newd(p_nov, dp)))
+  idx_ves <- predict(b_ves, newd(b_ves, d), type = "response") *
+    exp(predict(p_ves, newd(p_ves, dp)))
+  
+  nom <- d %>% group_by(Yr) %>% summarise(v = mean(cpue), .groups = "drop")
+  yrs <- as.numeric(levels(d$Yrf))
+  
+  out <- bind_rows(
+    data.frame(Yr = nom$Yr, idx = nom$v / mean(nom$v),        serie = "nominal (con ceros)"),
+    data.frame(Yr = yrs, idx = idx_nov / mean(idx_nov),       serie = "delta SIN embarcación"),
+    data.frame(Yr = yrs, idx = idx_ves / mean(idx_ves),       serie = "delta CON EMBARCACIÓN")) %>%
+    mutate(definicion = lab)
+  
+  cat("\n-- pendiente por serie --\n")
+  print(out %>% group_by(serie) %>%
+          summarise(pendiente = coef(lm(idx ~ Yr))[2],
+                    p = summary(lm(idx ~ Yr))$coefficients[2, 4],
+                    cambio_total_pct = 100 * (idx[which.max(Yr)] / idx[which.min(Yr)] - 1),
+                    .groups = "drop") %>%
+          mutate(across(where(is.numeric), ~signif(., 3))) %>% as.data.frame())
+  out
+}
+
+res <- bind_rows(
+  standardise(defs[["B_ensamblaje"]],    "B ensamblaje"),
+  standardise(defs[["D_embarcaciones"]], "D embarcaciones"))
+
+p <- ggplot(res, aes(Yr, idx, colour = serie)) +
+  geom_line(linewidth = 0.9) + geom_point(size = 1) +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  facet_wrap(~definicion) +
+  labs(title = "CPUE estandarizada de mero (F2), 2000-2024",
+       subtitle = "Si la caída se acentúa al incluir embarcación, la flota sobreviviente es más eficiente",
+       x = "Año", y = "Índice relativo") +
+  theme_bw(base_size = 12) + theme(legend.position = "bottom")
+ggsave("F2_cpue_estandarizada_final.png", p, width = 11, height = 5.5, dpi = 300)
+
+write.csv(res, "F2_indices_estandarizados.csv", row.names = FALSE)
+cat("\nGuardado: F2_indices_estandarizados.csv y la figura.\n")
