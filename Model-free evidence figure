@@ -1,0 +1,101 @@
+# ------------------------------------------------------------
+# FIGURE: model-free evidence of decline in grouper landings
+# ------------------------------------------------------------
+# Grouper's SHARE of total landings within a trip is immune to the
+# problems that affect CPUE: it needs no hooks, no vessel counts, no
+# effort standardisation, and it is unaffected by any change in what a
+# landing report ("aviso de arribo") represents, because numerator and
+# denominator come from the same trip.
+#
+# It can still fall for a non-abundance reason: if vessels switch to
+# octopus, grouper share drops without any change in stock. Two controls
+# address this:
+#   (i)  trips that landed NO octopus  -> targeting switch removed
+#   (ii) January-July only             -> outside the octopus season
+#
+# RESULT: in the mid-range fleet (F2) the decline survives both controls
+# and strengthens. In the artisanal fleet (F1) it does not, consistent
+# with documented economic substitution toward octopus.
+# -------------------------------------------------------------------
+
+library(dplyr); library(ggplot2)
+
+MORIO <- "Epinephelus morio"
+PULPO <- c("Octopus maya", "Octopus americanus", "Octopus vulgaris")
+DROP  <- c(2002)                      # Hurricane Isidore: near-zero effort
+FLEET_LAB <- c(artisanal = "Artisanal fleet (F1)", mid.range = "Mid-range fleet (F2)")
+
+# ---- trip-level table ----
+tr <- yuc %>%
+  filter(!ANO.CORTE %in% DROP) %>%
+  group_by(trip) %>%
+  summarise(fleet = first(fleet), Yr = first(ANO.CORTE), mo = first(mes),
+            t_mor = sum(ton[species == MORIO],  na.rm = TRUE),
+            t_pul = sum(ton[species %in% PULPO], na.rm = TRUE),
+            t_tot = sum(ton, na.rm = TRUE), .groups = "drop") %>%
+  filter(t_tot > 0)
+
+mk <- function(d, lab) {
+  d %>% group_by(fleet, Yr) %>%
+    summarise(n = n(), share = 100 * sum(t_mor) / sum(t_tot), .groups = "drop") %>%
+    filter(is.finite(share), share > 0) %>%
+    mutate(subset = lab)
+}
+dat <- bind_rows(
+  mk(tr,                          "All trips"),
+  mk(tr %>% filter(t_pul == 0),   "Trips without octopus"),
+  mk(tr %>% filter(!mo %in% 8:12),"January-July only")
+) %>%
+  mutate(subset = factor(subset, levels = c("All trips", "Trips without octopus",
+                                            "January-July only")),
+         fleet_lab = FLEET_LAB[as.character(fleet)])
+
+# ---- log-linear trends, weighted by number of trips ----
+fits <- dat %>% group_by(fleet_lab, subset) %>%
+  group_modify(~{
+    m  <- lm(log(share) ~ Yr, data = .x, weights = .x$n)
+    co <- summary(m)$coefficients
+    tibble(rate = 100*(exp(co[2,1]) - 1), p = co[2,4],
+           b0 = co[1,1], b1 = co[2,1])
+  }) %>% ungroup()
+
+pred <- dat %>% left_join(fits, by = c("fleet_lab", "subset")) %>%
+  mutate(fit = exp(b0 + b1 * Yr))
+
+ann <- fits %>%
+  mutate(lab = sprintf("%s: %+.2f%%/yr (p = %s)", subset, rate,
+                       ifelse(p < 0.001, "<0.001", sprintf("%.3f", p)))) %>%
+  group_by(fleet_lab) %>%
+  summarise(txt = paste(lab, collapse = "\n"), .groups = "drop")
+
+COLS <- c("All trips" = "grey45", "Trips without octopus" = "#1b7837",
+          "January-July only" = "#762a83")
+
+landings <- ggplot(dat, aes(Yr, share, colour = subset)) +
+  geom_point(aes(size = n), alpha = .55) +
+  geom_line(data = pred, aes(y = fit), linewidth = 1) +
+  geom_text(data = ann, aes(x = -Inf, y = Inf, label = txt),
+            hjust = -0.03, vjust = 1.25, size = 3.1, colour = "grey15",
+            lineheight = 1.05, inherit.aes = FALSE) +
+  facet_wrap(~fleet_lab, nrow = 1, scales = "free_y") +
+  scale_colour_manual(values = COLS, name = NULL) +
+  scale_size_continuous(range = c(.7, 3.2), guide = "none") +
+  labs(x = "Year", y = "Red grouper share of landed weight (%)") +
+  theme_bw(base_size = 12) +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom",
+        strip.background = element_rect(fill = "grey95"),
+        strip.text = element_text(face = "bold"))
+
+ggsave("Fig_landings_share_decline.png", landings, width = 11, height = 5.5, dpi = 300)
+landings
+
+cat("\n=== trends (log-linear, weighted by number of trips) ===\n")
+print(as.data.frame(fits %>% select(fleet_lab, subset, rate, p)), digits = 3)
+cat("\ntotal change over the series:\n")
+print(as.data.frame(
+  fits %>% left_join(dat %>% group_by(fleet_lab) %>%
+                       summarise(span = diff(range(Yr)), .groups = "drop"),
+                     by = "fleet_lab") %>%
+    transmute(fleet_lab, subset, total_pct = 100*(exp(b1*span) - 1))), digits = 3)
+
+# ------------------------------------------------------------
