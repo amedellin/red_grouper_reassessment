@@ -1,0 +1,44 @@
+#-------------------------------------------------------------
+# Gather all jitter derived quants to report on manuscript
+#-------------------------------------------------------------
+library(r4ss); library(dplyr)
+
+EY   <- 2023
+jr   <- file.path(ROOT, "jit_frac99")
+dirs <- sort(list.dirs(jr, recursive = FALSE))
+
+kb <- bind_rows(lapply(dirs, function(d) {
+  o <- tryCatch(SS_output(d, verbose=FALSE, printstats=FALSE, covar=FALSE),
+                error=function(e) NULL)
+  if (is.null(o)) return(NULL)
+  dq <- o$derived_quants
+  p  <- o$parameters %>% filter(!is.na(Phase), Phase > 0, !is.na(Min), !is.na(Max))
+  r  <- p$Max - p$Min
+  data.frame(
+    rep     = basename(d),
+    logL    = o$likelihoods_used["TOTAL","values"],
+    grad    = o$maximum_gradient_component,
+    B0      = dq["SSB_unfished","Value"],
+    B00     = dq["Totbio_unfished","Value"],
+    SSB     = dq[paste0("SSB_", EY),"Value"],
+    B_Bmsy  = dq[paste0("Bratio_", EY),"Value"] / dq["B_MSY/SSB_unfished","Value"],
+    F_Fmsy  = dq[paste0("F_", EY),"Value"],          # F_std_basis = 2, no dividir
+    SPR     = 1 - dq[paste0("SPRratio_", EY),"Value"],
+    MSY     = dq["Dead_Catch_MSY","Value"],
+    OFL     = dq[paste0("OFLCatch_", EY+1),"Value"],
+    n_bound = sum((abs(p$Value-p$Min)/r < .005) | (abs(p$Value-p$Max)/r < .005)))
+}))
+
+v <- kb %>% filter(grad < 1e-3, n_bound == 0) %>% arrange(logL)
+cat(sprintf("válidas: %d de %d\n\n", nrow(v), nrow(kb)))
+print(as.data.frame(v %>% select(rep, logL, B_Bmsy, F_Fmsy, SPR, B0, B00, MSY, OFL)),
+      digits = 4, row.names = FALSE)
+
+cat(sprintf("\nB/Bmsy  %.3f  [%.3f - %.3f]  | %.0f%% bajo BMSY\n",
+            v$B_Bmsy[1], min(v$B_Bmsy), max(v$B_Bmsy), 100*mean(v$B_Bmsy < 1)))
+cat(sprintf("F/Fmsy  %.3f  [%.3f - %.3f]  | %.0f%% con sobrepesca\n",
+            v$F_Fmsy[1], min(v$F_Fmsy), max(v$F_Fmsy), 100*mean(v$F_Fmsy > 1)))
+cat(sprintf("SPR     %.3f  [%.3f - %.3f]\n", v$SPR[1], min(v$SPR), max(v$SPR)))
+cat(sprintf("B0      %.0f [%.0f - %.0f] B00      %.0f [%.0f - %.0f] MSY %.0f [%.0f - %.0f]  OFL %.0f [%.0f - %.0f]\n",
+            v$B0[1], min(v$B0), max(v$B0),v$B00[1], min(v$B00), max(v$B00), v$MSY[1], min(v$MSY), max(v$MSY),
+            v$OFL[1], min(v$OFL), max(v$OFL))),
