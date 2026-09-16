@@ -1,0 +1,483 @@
+#------------------------------------------------
+library(spict); library(datalimited2)
+
+# spict runs with different q for hooks
+
+CUT  <- 2000
+pre  <- cpueht2$Year <  CUT & !is.na(cpueht2$hooks)
+post <- cpueht2$Year >= CUT & !is.na(cpueht2$hooks)
+tr   <- !is.na(cpueht2$trawl)
+
+inp <- list("timeC" = hist$Year, "obsC" = hist$total)
+inp$timeI <- list(cpueht2$Year[pre], cpueht2$Year[post], cpueht2$Year[tr])
+inp$obsI  <- list(cpueht2$hooks[pre], cpueht2$hooks[post], cpueht2$trawl[tr])
+
+inp$mapsdi <- c(1, 1, 2)          # misma sd de observación en los dos tramos de anzuelo
+# priores idénticos a los tuyos; logq va por índice:
+inp$priors$logq1 <- c(log(0.01), 2, 0)
+inp$priors$logq2 <- c(log(0.01), 2, 0)
+inp$priors$logq3 <- c(log(0.01), 2, 0)
+
+# spict with two indexes of abundance
+inp <- list("timeC"=hist$Year,"obsC"=hist$total)
+
+inp$timeI<-list("timeI"=cpueht2$Year,"timeI"=cpueht2$Year)
+inp$obsI<-list()
+inp$obsI[[1]]<-cpueht2$hooks
+inp$obsI[[2]]<-cpueht2$trawl
+inp$logq <- c(log(0.01),2,0)
+
+inp$priors$logn <- c(log(1.2), 0.2, 1)
+inp$priors$logbkfrac <- c(log(0.999), 0.1, 1)
+inp$priors$logK <- c(log(max(hist$total)*2),0.6,1)
+inp$priors$logr<- c(log(0.35),0.6, 1)
+inp$priors$logsdc<-c(log(cvct),0.1,0) # process error on catch
+inp$priors$logsdb<-c(log(0.1),0.1,0) # process error on biomass
+inp$priors$logsdi<-c(log(0.2),0.1,0) # observation error on index
+
+# Model
+res <- fit.spict(inp)
+
+# Evaluate results
+
+sumspict.parest(res)
+
+summary(res)
+
+plot(res)
+plotspict.priors(res)
+
+# time to bmsy changing F
+plotspict.tc(res)
+plotspict.biomass(res)
+plotspict.bbmsy(res)
+
+# residual analysis... asumptions of data to be fitted in model
+ress<-calc.osa.resid(res)
+plotspict.diagnostic(ress)
+
+#retrospective analysis
+
+library(parallel)
+
+# Función personalizada compatible con Windows
+retro_windows <- function(res, nretroyear = 5, ncores = 5) {
+  
+  # 1. Determinar el número de núcleos a usar (máximo 5 si nretroyear = 5)
+  ncores <- min(ncores, nretroyear, detectCores())
+  
+  # 2. Definir los años/tiempos de corte para la retrospectiva
+  max_time <- max(res$inp$timeC)
+  maxtimes <- max_time - (1:nretroyear)
+  
+  # 3. Crear el clúster de procesos en Windows
+  cl <- makeCluster(ncores)
+  
+  # 4. Cargar la librería spict en cada núcleo del clúster
+  clusterEvalQ(cl, library(spict))
+  
+  # 5. Exportar los datos del modelo al clúster
+  clusterExport(cl, varlist = c("res", "maxtimes"), envir = environment())
+  
+  # 6. Ejecutar los ajustes del modelo en paralelo
+  message(paste("Ejecutando análisis retrospectivo en", ncores, "núcleos en paralelo..."))
+  retro_fits <- parLapply(cl, maxtimes, function(mt) {
+    inp_short <- shorten.inp(res$inp, maxtime = mt)
+    fit.spict(inp_short)
+  })
+  
+  # 7. Apagar el clúster para liberar la memoria
+  stopCluster(cl)
+  
+  # 8. Asignar los resultados al objeto base de SPiCT
+  res$retro <- retro_fits
+  return(res)
+}
+
+rets<-retro_windows(res,nretroyear=5)
+plotspict.retro(rets)
+plotspict.retro.fixed(rets)
+
+# Get b/bmsy & f/fmsy estimates
+
+get.par("logBBmsy", res, exp=TRUE) # B/Bmsy time series
+get.par("logFFmsy", res, exp=TRUE) # F/Fmsy time series
+
+BBmsy_spict_raw <- get.par("logBBmsy", res, exp = TRUE)
+
+FFmsy_spict_raw <- get.par("logFFmsy", res, exp = TRUE)
+
+# Create data.table for kobe plot
+kobeB_spict <- data.table(
+  Year = res$inp$timeC,  
+  bbmsy = BBmsy_spict_raw[, "est"][as.character(res$inp$timeC)],
+  bbmsyl = BBmsy_spict_raw[, "ll"][as.character(res$inp$timeC)],
+  bbmsyh = BBmsy_spict_raw[, "ul"][as.character(res$inp$timeC)],
+  ffmsy = FFmsy_spict_raw[, "est"][as.character(res$inp$timeC)],
+  ffmsyl = FFmsy_spict_raw[, "ll"][as.character(res$inp$timeC)],
+  ffmsyh = FFmsy_spict_raw[, "ul"][as.character(res$inp$timeC)]
+)
+
+
+
+# Create data.table with stock biomass
+B_spict_raw <- get.par("logB", res, exp = TRUE)
+
+B_spict_table <- data.table(
+  Year = res$inp$timeC,  
+  B = B_spict_raw[, "est"][as.character(res$inp$timeC)],
+  Blower = B_spict_raw[, "ll"][as.character(res$inp$timeC)],
+  Bhigher = B_spict_raw[, "ul"][as.character(res$inp$timeC)],
+  Fuente = "SPiCT_redgrouper",
+  B_MSY =get.par("logBmsy", res, exp = TRUE)[2],
+  MSY = get.par("logMSY", res, exp = TRUE)[2]
+)
+
+# Kobe para cada punto
+spikobe <- kobeB_spict %>%
+  mutate(
+    kobe_status = case_when(
+      bbmsy >= 1 & ffmsy <= 1 ~ "Sustainable",  # B > BMSY, F < FMSY
+      bbmsy >= 1 & ffmsy > 1 ~ "Overfishing", # B > BMSY, F > FMSY
+      bbmsy < 1 & ffmsy <= 1 ~ "Recovery", # B < BMSY, F < FMSY
+      bbmsy < 1 & ffmsy > 1 ~ "Overfished" # B < BMSY, F > FMSY
+    ),
+    # Aseguramos que 'year' sea numérico para la etiqueta
+    year = as.numeric(Year)
+  )
+
+# Definir colores manualmente para cada estado
+kobe_colors <- c(
+  "Sustainable" = "darkgreen", 
+  "Overfishing" = "orange",
+  "Recovery" = "gold",
+  "Overfished" = "red"
+)
+
+first_years <- spikobe[1, ]
+last_year_indexs <- nrow(spikobe)
+
+tmp11<-data.frame(
+  Label=c("Bratio_2023","F_2023"),
+  StdDev=c(0.08,0.05)
+)
+
+nspictk<-ggplot(data = spikobe, aes(x = bbmsy, y = ffmsy, label = Year)) +
+  
+  # Líneas de referencia (BBMSY=1, FFMSY=1)
+  geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  
+  # Puntos (con color asignado por kobe_status)
+  geom_point(aes(colour = kobe_status), show.legend = TRUE, size = 2, alpha = 0.7) +
+  
+  # AUMENTAR TAMAÑO DEL PUNTO INICIAL (PRIMER AÑO)
+  geom_point(data = first_years, # Usa solo la fila del primer año
+             aes(colour = kobe_status),
+             size = 4, # Tamaño más grande
+             shape = 15) + # Forma cuadrada para destacarlo (opcional)
+  
+  # Trayectoria con flechas
+  geom_segment(aes(x = bbmsy, y = ffmsy, xend = lead(bbmsy), yend = lead(ffmsy), colour = kobe_status),
+               arrow = arrow(length = unit(0.2,"cm"))) +
+  
+  # Barras de error horizontales (B/B_MSY) - Último punto
+  geom_segment(aes(x = spikobe$bbmsy[last_year_indexs] + tmp11[tmp11$Label=="Bratio_2023","StdDev"],
+                   xend = spikobe$bbmsy[last_year_indexs] - tmp11[tmp11$Label=="Bratio_2023","StdDev"],
+                   y = spikobe$ffmsy[last_year_indexs], yend = spikobe$ffmsy[last_year_indexs]),
+               col = "grey", size = 1) +
+  
+  # Barras de error verticales (F/F_MSY) - Último punto
+  geom_segment(aes(x = spikobe$bbmsy[last_year_indexs], xend = spikobe$bbmsy[last_year_indexs],
+                   y = spikobe$ffmsy[last_year_indexs] + tmp11[tmp11$Label=="F_2023","StdDev"],
+                   yend = spikobe$ffmsy[last_year_indexs] - tmp11[tmp11$Label=="F_2023","StdDev"]),
+               col = "grey", size = 1) +
+  
+  # Punto final con incertidumbre (en color gris para destacarlo)
+  annotate("point", x = spikobe$bbmsy[last_year_indexs], y = spikobe$ffmsy[last_year_indexs], size = 3, shape = 21, fill = "white", colour = "black") +
+  
+  # REEMPLAZAR geom_text CON ggrepel::geom_text_repel
+  geom_text_repel(aes(colour = kobe_status), # Mantiene el color por estado
+                  min.segment.length = 0, # Dibuja segmentos hasta el punto
+                  size = 3.5,
+                  max.overlaps = 3) + # Permite que se procesen todas las etiquetas
+  
+  # Aplicar los colores manuales y el nombre de la leyenda
+  scale_colour_manual(values = kobe_colors, name = "Status of stock") +
+  
+  # Escalas y títulos
+  expand_limits(y = 0, x = c(0, 2.2)) +
+  scale_y_continuous(expand = c(0, 0), breaks = seq(0, 3.5, 0.5)) +
+  scale_x_continuous(expand = c(0, 0), breaks = seq(0, 2.5, 0.5)) +
+  labs(x = expression(B/B[MSY]), y = expression(F/F[MSY])) +
+  
+  # Temas
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+
+#--------------------------------------------------------
+# spict 86
+
+inp <- list("timeC" = histi$Year, "obsC" = histi$total)
+inp$timeI <- list(cpueht2$Year[pre], cpueht2$Year[post], cpueht2$Year[tr])
+inp$obsI  <- list(cpueht2$hooks[pre], cpueht2$hooks[post], cpueht2$trawl[tr])
+
+inp$mapsdi <- c(1, 1, 2)          # misma sd de observación en los dos tramos de anzuelo
+# priores idénticos a los tuyos; logq va por índice:
+inp$priors$logq1 <- c(log(0.01), 2, 0)
+inp$priors$logq2 <- c(log(0.01), 2, 0)
+inp$priors$logq3 <- c(log(0.01), 2, 0)
+
+inp$priors$logn <- c(log(1.2), 0.2, 1)
+inp$priors$logbkfrac <- c(log(0.4), 0.1, 1)
+inp$priors$logK <- c(log(max(hist$total)*2),0.6,1)
+inp$priors$logr<- c(log(0.35),0.6, 1)
+inp$priors$logsdc<-c(log(cvct),0.1,0) # process error on catch
+inp$priors$logsdb<-c(log(0.1),0.1,0) # process error on biomass
+inp$priors$logsdi<-c(log(0.2),0.1,0) # observation error on index
+
+# Model
+res <- fit.spict(inp)
+
+# Evaluate results
+
+sumspict.parest(res)
+
+summary(res)
+
+plot(res)
+plotspict.priors(res)
+
+# time to bmsy changing F
+plotspict.tc(res)
+plotspict.biomass(res)
+plotspict.bbmsy(res)
+
+# residual analysis... asumptions of data to be fitted in model
+ress<-calc.osa.resid(res)
+plotspict.diagnostic(ress)
+
+#retrospective analysis
+
+library(parallel)
+
+# Función personalizada compatible con Windows
+retro_windows <- function(res, nretroyear = 5, ncores = 5) {
+  
+  # 1. Determinar el número de núcleos a usar (máximo 5 si nretroyear = 5)
+  ncores <- min(ncores, nretroyear, detectCores())
+  
+  # 2. Definir los años/tiempos de corte para la retrospectiva
+  max_time <- max(res$inp$timeC)
+  maxtimes <- max_time - (1:nretroyear)
+  
+  # 3. Crear el clúster de procesos en Windows
+  cl <- makeCluster(ncores)
+  
+  # 4. Cargar la librería spict en cada núcleo del clúster
+  clusterEvalQ(cl, library(spict))
+  
+  # 5. Exportar los datos del modelo al clúster
+  clusterExport(cl, varlist = c("res", "maxtimes"), envir = environment())
+  
+  # 6. Ejecutar los ajustes del modelo en paralelo
+  message(paste("Ejecutando análisis retrospectivo en", ncores, "núcleos en paralelo..."))
+  retro_fits <- parLapply(cl, maxtimes, function(mt) {
+    inp_short <- shorten.inp(res$inp, maxtime = mt)
+    fit.spict(inp_short)
+  })
+  
+  # 7. Apagar el clúster para liberar la memoria
+  stopCluster(cl)
+  
+  # 8. Asignar los resultados al objeto base de SPiCT
+  res$retro <- retro_fits
+  return(res)
+}
+
+rets<-retro_windows(res,nretroyear=5)
+plotspict.retro(rets)
+plotspict.retro.fixed(rets)
+
+# Get b/bmsy & f/fmsy estimates
+
+get.par("logBBmsy", res, exp=TRUE) # B/Bmsy time series
+get.par("logFFmsy", res, exp=TRUE) # F/Fmsy time series
+
+BBmsy_spict_raw <- get.par("logBBmsy", res, exp = TRUE)
+
+FFmsy_spict_raw <- get.par("logFFmsy", res, exp = TRUE)
+
+# Create data.table for kobe plot
+kobeB_spict <- data.table(
+  Year = res$inp$timeC,  
+  bbmsy = BBmsy_spict_raw[, "est"][as.character(res$inp$timeC)],
+  bbmsyl = BBmsy_spict_raw[, "ll"][as.character(res$inp$timeC)],
+  bbmsyh = BBmsy_spict_raw[, "ul"][as.character(res$inp$timeC)],
+  ffmsy = FFmsy_spict_raw[, "est"][as.character(res$inp$timeC)],
+  ffmsyl = FFmsy_spict_raw[, "ll"][as.character(res$inp$timeC)],
+  ffmsyh = FFmsy_spict_raw[, "ul"][as.character(res$inp$timeC)]
+)
+
+
+
+# Create data.table with stock biomass
+B_spict_raw <- get.par("logB", res, exp = TRUE)
+
+B_spict_table <- data.table(
+  Year = res$inp$timeC,  
+  B = B_spict_raw[, "est"][as.character(res$inp$timeC)],
+  Blower = B_spict_raw[, "ll"][as.character(res$inp$timeC)],
+  Bhigher = B_spict_raw[, "ul"][as.character(res$inp$timeC)],
+  Fuente = "SPiCT_redgrouper",
+  B_MSY =get.par("logBmsy", res, exp = TRUE)[2],
+  MSY = get.par("logMSY", res, exp = TRUE)[2]
+)
+
+# Kobe para cada punto
+spikobe <- kobeB_spict %>%
+  mutate(
+    kobe_status = case_when(
+      bbmsy >= 1 & ffmsy <= 1 ~ "Sustainable",  # B > BMSY, F < FMSY
+      bbmsy >= 1 & ffmsy > 1 ~ "Overfishing", # B > BMSY, F > FMSY
+      bbmsy < 1 & ffmsy <= 1 ~ "Recovery", # B < BMSY, F < FMSY
+      bbmsy < 1 & ffmsy > 1 ~ "Overfished" # B < BMSY, F > FMSY
+    ),
+    # Aseguramos que 'year' sea numérico para la etiqueta
+    year = as.numeric(Year)
+  )
+
+# Definir colores manualmente para cada estado
+kobe_colors <- c(
+  "Sustainable" = "darkgreen", 
+  "Overfishing" = "orange",
+  "Recovery" = "gold",
+  "Overfished" = "red"
+)
+
+first_years <- spikobe[1, ]
+last_year_indexs <- nrow(spikobe)
+
+tmp11<-data.frame(
+  Label=c("Bratio_2023","F_2023"),
+  StdDev=c(0.08,0.05)
+)
+
+nspictk86<-ggplot(data = spikobe, aes(x = bbmsy, y = ffmsy, label = Year)) +
+  
+  # Líneas de referencia (BBMSY=1, FFMSY=1)
+  geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  
+  # Puntos (con color asignado por kobe_status)
+  geom_point(aes(colour = kobe_status), show.legend = TRUE, size = 2, alpha = 0.7) +
+  
+  # AUMENTAR TAMAÑO DEL PUNTO INICIAL (PRIMER AÑO)
+  geom_point(data = first_years, # Usa solo la fila del primer año
+             aes(colour = kobe_status),
+             size = 4, # Tamaño más grande
+             shape = 15) + # Forma cuadrada para destacarlo (opcional)
+  
+  # Trayectoria con flechas
+  geom_segment(aes(x = bbmsy, y = ffmsy, xend = lead(bbmsy), yend = lead(ffmsy), colour = kobe_status),
+               arrow = arrow(length = unit(0.2,"cm"))) +
+  
+  # Barras de error horizontales (B/B_MSY) - Último punto
+  geom_segment(aes(x = spikobe$bbmsy[last_year_indexs] + tmp11[tmp11$Label=="Bratio_2023","StdDev"],
+                   xend = spikobe$bbmsy[last_year_indexs] - tmp11[tmp11$Label=="Bratio_2023","StdDev"],
+                   y = spikobe$ffmsy[last_year_indexs], yend = spikobe$ffmsy[last_year_indexs]),
+               col = "grey", size = 1) +
+  
+  # Barras de error verticales (F/F_MSY) - Último punto
+  geom_segment(aes(x = spikobe$bbmsy[last_year_indexs], xend = spikobe$bbmsy[last_year_indexs],
+                   y = spikobe$ffmsy[last_year_indexs] + tmp11[tmp11$Label=="F_2023","StdDev"],
+                   yend = spikobe$ffmsy[last_year_indexs] - tmp11[tmp11$Label=="F_2023","StdDev"]),
+               col = "grey", size = 1) +
+  
+  # Punto final con incertidumbre (en color gris para destacarlo)
+  annotate("point", x = spikobe$bbmsy[last_year_indexs], y = spikobe$ffmsy[last_year_indexs], size = 3, shape = 21, fill = "white", colour = "black") +
+  
+  # REEMPLAZAR geom_text CON ggrepel::geom_text_repel
+  geom_text_repel(aes(colour = kobe_status), # Mantiene el color por estado
+                  min.segment.length = 0, # Dibuja segmentos hasta el punto
+                  size = 3.5,
+                  max.overlaps = 3) + # Permite que se procesen todas las etiquetas
+  
+  # Aplicar los colores manuales y el nombre de la leyenda
+  scale_colour_manual(values = kobe_colors, name = "Status of stock") +
+  
+  # Escalas y títulos
+  expand_limits(y = 0, x = c(0, 2.2)) +
+  scale_y_continuous(expand = c(0, 0), breaks = seq(0, 3.5, 0.5)) +
+  scale_x_continuous(expand = c(0, 0), breaks = seq(0, 2.5, 0.5)) +
+  labs(x = expression(B/B[MSY]), y = expression(F/F[MSY])) +
+  
+  # Temas
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+
+#-------------------------------------------------------
+# bounded BSM for better comparison
+
+B  <- get.par("logB", res, exp = TRUE)      # res = SPiCT serie completa
+K  <- get.par("logK", res, exp = TRUE)[2]
+tt <- as.numeric(rownames(B))
+i  <- which.min(abs(tt - 1982))
+bk <- B[i, "est"] / K
+cat(sprintf("B/K en 1982 = %.3f  [%.3f - %.3f]\n", bk, B[i,"ll"]/K, B[i,"ul"]/K))
+# B/K en 1982 = 0.398  [0.197 - 0.805]
+
+outx_align <- bsm(year = histx3$Year, catch = histx3$total, biomass = cpuex2$Index,
+                  btype = "CPUE", resilience = "Medium", r.low = 0.2, r.hi = 0.6,
+                  #stb.low = 0.30, stb.hi = 0.50,
+                  stb.low = NA, stb.hi = NA,
+                  int.yr = NA, intb.low = NA, intb.hi = NA,
+                  endb.low = 0.1, endb.hi = 0.8, verbose = TRUE)
+
+plot_dlm(outx_align)
+outx_align$ref_pt
+
+baregal<-outx_align$ref_ts
+
+tmp1<-data.frame(
+  Label=c("Bratio_2022","F_2022"),
+  StdDev=c(0.18,0.17)
+)
+
+#------------------------------------------------
+# cmsy & ocom endb.hi test
+
+endbhi<-cmsy2(year=hist$Year,catch=hist$total,resilience="Medium",
+            r.low=0.1,r.hi=0.6,stb.low=NA,stb.hi=NA,
+            int.yr=NA,intb.low=NA,intb.hi=NA,endb.low=NA,endb.hi=NA,verbose=TRUE)
+
+plot_dlm(endbhi)
+
+for (mm in c(0.15, 0.20, 0.225, 0.30)) {
+  o <- ocom(year = hist$Year, catch = hist$total, m = mm)
+  cat(sprintf("M = %.3f  ->  B/Bmsy = %.3f   F/Fmsy = %.3f\n",
+              mm, tail(o$ts$bbmsy, 1), tail(o$ts$ffmsy, 1)))
+}
+
+for (mm in c(0.15, 0.20, 0.225, 0.30)) {
+  o <- ocom(year = hist$Year, catch = hist$total, m = mm)
+  s <- o$ref_pts[o$ref_pts$param == "s_final", ]
+  cat(sprintf("M = %.3f  ->  s_final = %.3f [%.3f - %.3f]   B/Bmsy = %.2f\n",
+              mm, s$q0.5, s$q0.025, s$q0.975, s$q0.5/0.5))
+}
+
+for (mm in c(0.15, 0.30)) {
+  o <- ocom(year=hist$Year, catch=hist$total, m=mm)
+  print(o$ref_pts[o$ref_pts$param %in% c("r","fmsy"), ])
+}
+
+o <- ocom(year = hist$Year, catch = hist$total, m = 0.225)
+tail(o$ref_ts[, c("year","bbmsy","ffmsy")], 3)
